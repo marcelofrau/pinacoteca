@@ -1,0 +1,29 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Build output
+/dist/
+
+# ---------------------------------------------------------------------------
+# Proprietary third-party software (analysis targets only)
+#
+# The Picasa installer and its extracted runtime are Google proprietary code.
+# They are kept locally for clean-room behavioral analysis only and must NEVER
+# be committed, redistributed, or referenced from implementation code.
+# ---------------------------------------------------------------------------
+/binaries/
+
+# Local analysis scratch space (raw tool exports, dumps, temporary notes)
+/analysis-scratch/

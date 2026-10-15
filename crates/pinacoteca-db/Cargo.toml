@@ -1,0 +1,13 @@
+[package]
+name = "pinacoteca-db"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SQLite persistence for the Pinacoteca catalog, albums and edit stacks."
+
+[dependencies]
+rusqlite = { version = "0.40.2", features = ["bundled"] }

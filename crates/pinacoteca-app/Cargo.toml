@@ -1,0 +1,18 @@
+[package]
+name = "pinacoteca-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Pinacoteca desktop application: photo viewer, albums and maintenance."
+
+[[bin]]
+name = "pinacoteca"
+path = "src/main.rs"
+
+[dependencies]
+eframe = "0.33.3"
+pinacoteca-core = { path = "../pinacoteca-core" }

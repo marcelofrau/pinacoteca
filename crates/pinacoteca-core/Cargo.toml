@@ -1,0 +1,12 @@
+[package]
+name = "pinacoteca-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Domain model and logic for Pinacoteca: catalog, albums and non-destructive edits."
+
+[dependencies]

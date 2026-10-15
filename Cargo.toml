@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pinacoteca-app",
+    "crates/pinacoteca-core",
+    "crates/pinacoteca-decoders",
+    "crates/pinacoteca-db",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "GPL-3.0-or-later"
+authors = ["Marcelo Frau"]
+repository = "https://github.com/marcelofrau/pinacoteca"
+homepage = "https://github.com/marcelofrau/pinacoteca"
+
+[workspace.dependencies]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 2
