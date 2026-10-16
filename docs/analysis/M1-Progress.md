@@ -15,3 +15,12 @@ Overall M1 in progress. Draft specs sufficient for initial review; deeper behavi
 - Pass 3 candidates logged; REA session closed.
 
 M1 remains in progress; pass 3 (keyboard/slideshow timing) optional before M2 gate.
+
+## M1 status (pass 3 — keyboard/slideshow/pan)
+- Keyboard mapping: static investigation concluded NOT statically enumerable. No populated accelerator resource (dummy accel table at main); every `ss/*` string has a single xref from the command dispatcher; window creation goes through the Fen framework `CreateWindowExW` wrapper `FUN_004d23a0`, so `WM_KEYDOWN` handling lives in Fen's window class. Documented in viewer-spec-draft.md with a runtime-probe plan (inject keys, log dispatcher) and a hypothesized 1:1 key->`ss/*` binding set to verify.
+- Fen framework identity confirmed (Win32WindowImp-style window wrapper). PDB referenced but not admitted, so original symbol names unavailable.
+- Next: slideshow timing + pan drag (string/xref), then Picasa3.exe albums/grid/thumbnails + maintenance.
+- Slideshow: transition-driven (`SlideshowTransitionHandler` + `ytTransitionNode`/`CTransitions`); no literal interval string -> interval is config/DB-driven (default to define in Pinacoteca). Documented.
+- Pan-when-zoomed: no dedicated command string; drag-based (`selectiondrag`/`windrag`/`mousedown`) -> runtime-probe candidate. Documented.
+- UI framework likened: viewer uses in-house Fen/yt framework (Fen::TabPanel/MultiPanel/Win32TabPanelImp, ytPanel/ytBasePanel, ytSelectionDragHandler, HSliderFastDrag, transition nodes, Win32WindowImp). Added "UI framework & infrastructure" section to viewer-spec-draft.md.
+- Pass 3 viewer spec now covers: command set, UI events, filmstrip, zoom, keyboard (static-negative + runtime plan), slideshow, pan, framework. Viewer spec pass 3 CLOSED.
