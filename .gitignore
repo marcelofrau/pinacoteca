@@ -27,3 +27,6 @@ desktop.ini
 
 # Local analysis scratch space (raw tool exports, dumps, temporary notes)
 /analysis-scratch/
+
+# Host tooling artifacts (opencode plugins etc.)
+.cortexkit/
