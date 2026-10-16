@@ -1,7 +1,6 @@
 ## M1 status
-- Ghidra healthy; PEs copied to temp. String search working for viewer strings.
-- Collected viewer UI action names from .yt/.fen and string literals.
-- PhotoViewer.exe: ss/zoomtext located at 0x726b90. Need to trace xrefs from this string to handlers (zoom behavior).
-- Next steps: open PhotoViewer.exe, enumerate xrefs to 0x726b90 and nearby action strings; document viewer behaviors.
+- ss/zoomtext (0x726b90) in PhotoViewer has 5 xrefs (4251ed, 42f11c, 42f9b9, 42fae7, 42fd55). Indicates UI wiring for zoom text/display.
+- Resource-driven hints collected (control bar actions, filmstrip variants).
+- Plan: inspect xrefs to infer zoom behavior; also get xrefs for ss/fullscreen, ss/filmstrip, ss/play_slideshow.
 
-Still pending: full viewer spec, albums/maintenance/thumbnails specs, PMP/DB schema.
+Viewer spec draft next. Will proceed to collect more xrefs, then write viewer.md with behavioral steps (fullscreen/zoom/pan/filmstrip/slideshow/nav).
