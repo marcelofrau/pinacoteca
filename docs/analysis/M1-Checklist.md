@@ -1,0 +1,11 @@
+## M1 checklist
+- [x] Create analysis structure under docs/analysis/{viewer,albums,maintenance,formats,thumbnails}
+- [x] Extract setup binaries and confirm native PEs (not .NET)
+- [x] REA Ghidra provider healthy; handle Windows ACL/bridge temp copy
+- [x] Collect resource-driven hints (.fen/.ui/.yt, constants.ui, properties.xml)
+- [x] Plan string-driven + resource-driven REA (avoid full procedure enum timeouts)
+- [ ] PicasaPhotoViewer.exe: map viewer behaviors (fullscreen/zoom/pan/filmstrip/slideshow/nav)
+- [ ] Picasa3.exe: map albums/grid/thumbnails + maintenance actions
+- [ ] Document viewer/albums/maintenance/thumbnails specs
+- [ ] Investigate PMP/DB schema from code references
+- [ ] Write behavioral specs sufficient for clean-room reimplementation
