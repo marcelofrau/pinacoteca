@@ -1,15 +1,16 @@
 # Viewer UI State Machines (from resources)
 
-## Observed
-- ss/fullscreen, ss/zoomtext, ss/filmstrip, ss/play_slideshow, ss/next/prev
-- 3dfilmstrip, filmstripmove
-- Sliders (HSlider, VertSlider)
-- Slideshow in Picasa3 (BigSlideshow2, editpanel/editslideshow)
+## Control bar actions (PhotoViewer)
+- ss/play_slideshow -> start slideshow
+- ss/fullscreen -> fullscreen toggle
+- ss/to_web -> share to web (out of initial scope; note)
+- ss/zoomtext, ss/zoomrect -> zoom controls/display
+- ss/filmstrip -> toggle filmstrip
+- layer:ss/3dfilmstrip -> 3D filmstrip variant
 
-## To extract
-- Fullscreen toggle
-- Zoom (fit/actual/in/out/wheel)
-- Pan (drag)
-- Filmstrip show/hide/3D
-- Slideshow start/pause/exit
-- Navigation (arrows/space)
+## Navigation
+- ss/next, ss/prev (inferred from ss/next seen earlier)
+
+## Interactions
+- Sliders (HSlider, VertSlider) for zoom/scroll
+- filmstripmove, 3dfilmstrip_clicked (mouse interactions)
