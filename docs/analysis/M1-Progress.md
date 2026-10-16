@@ -1,6 +1,7 @@
-## M1 status
-- ss/zoomtext (0x726b90) in PhotoViewer has 5 xrefs (4251ed, 42f11c, 42f9b9, 42fae7, 42fd55). Indicates UI wiring for zoom text/display.
-- Resource-driven hints collected (control bar actions, filmstrip variants).
-- Plan: inspect xrefs to infer zoom behavior; also get xrefs for ss/fullscreen, ss/filmstrip, ss/play_slideshow.
+## M1 status (end of pass 1)
+- Resource-driven + string-located: PhotoViewer zoomtext at 0x726b90 with xrefs; viewer UI commands identified.
+- Draft specs created: viewer-spec-draft.md, albums-thumbnails-draft.md, maintenance-draft.md, pmp-notes.md.
+- M1 checklist updated (structure done, resources done). Need deeper REA: trace xrefs to handlers, collect more string->xref for key actions (fullscreen, filmstrip, slideshow, rotate/crop/enhance).
+- Plan next: PhotoViewer - open binary, trace xrefs from key strings to see handler names/structure; Picasa3 for maintenance/albums.
 
-Viewer spec draft next. Will proceed to collect more xrefs, then write viewer.md with behavioral steps (fullscreen/zoom/pan/filmstrip/slideshow/nav).
+Overall M1 in progress. Draft specs sufficient for initial review; deeper behavioral extraction needed for clean-room impl.
