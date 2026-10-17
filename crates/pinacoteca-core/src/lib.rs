@@ -11,6 +11,7 @@
 pub mod album;
 pub mod catalog;
 pub mod edit;
+pub mod picasa_ini;
 pub mod scan;
 
 pub use album::{Album, AlbumId, AlbumKind};

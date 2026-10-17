@@ -217,6 +217,55 @@ impl PinacotecaApp {
         }
     }
 
+    /// Imports stars, captions and keywords from each folder's `.picasa.ini`.
+    ///
+    /// Read-only: the INI is never rewritten, so a library that is still
+    /// managed by Picasa keeps working and unknown keys survive untouched.
+    /// Album membership is deliberately not imported — Picasa stores opaque
+    /// tokens there and resolves the names in its own obfuscated database.
+    fn import_picasa_ini(&mut self) {
+        let mut folders: Vec<PathBuf> = self
+            .entries
+            .iter()
+            .filter_map(|entry| entry.path.parent().map(Path::to_path_buf))
+            .collect();
+        folders.sort();
+        folders.dedup();
+
+        let mut imported = 0usize;
+        for folder in folders {
+            let ini = match pinacoteca_core::picasa_ini::read(&folder.join(".picasa.ini")) {
+                Ok(Some(ini)) => ini,
+                _ => match pinacoteca_core::picasa_ini::read(&folder.join("Picasa.ini")) {
+                    Ok(Some(ini)) => ini,
+                    _ => continue,
+                },
+            };
+
+            for photo in &ini.photos {
+                let Some(db) = &self.db else { break };
+                let path = folder.join(&photo.file).to_string_lossy().into_owned();
+                if let Some(star) = photo.star {
+                    let _ = db.set_photo_rating(&path, star);
+                }
+                if let Some(caption) = &photo.caption {
+                    let _ = db.set_photo_caption(&path, caption);
+                }
+                for keyword in &photo.keywords {
+                    if let Ok(tag_id) = db.ensure_tag(keyword) {
+                        let _ = db.tag_photo(&path, tag_id);
+                    }
+                }
+                imported += 1;
+            }
+        }
+
+        if imported > 0 {
+            self.status = format!("Imported metadata from .picasa.ini for {imported} photo(s)");
+        }
+        self.apply_stored_ratings();
+    }
+
     /// Paints the stored ratings onto the scanned entries.
     fn apply_stored_ratings(&mut self) {
         let Some(ratings) = self.db.as_ref().and_then(|db| db.ratings_by_path().ok()) else {
@@ -493,7 +542,7 @@ impl PinacotecaApp {
             }
             if finished {
                 self.scan = None;
-                self.apply_stored_ratings();
+                self.import_picasa_ini();
                 self.view = View::All;
                 self.rebuild_visible();
             }
@@ -976,6 +1025,79 @@ mod tests {
         let entry = entry_for(&row).expect("entry");
         assert_eq!(entry.key, key_for(&scanned, ThumbSize::Normal));
         assert_eq!(entry.rating, 3);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The import must persist the user state and must never rewrite the INI,
+    /// so a library still managed by Picasa keeps working.
+    #[test]
+    fn picasa_ini_import_restores_stars_and_keywords() {
+        let dir = std::env::temp_dir().join(format!("pinacoteca-ini-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        let photo = dir.join("IMG_0001.JPG");
+        std::fs::write(&photo, b"not really a jpeg").expect("photo");
+        let ini_text =
+            "[Picasa]\r\nname=Trip\r\n\r\n[IMG_0001.JPG]\r\nstar=4\r\nkeywords=family,beach\r\n";
+        std::fs::write(dir.join(".picasa.ini"), ini_text).expect("ini");
+
+        let db = Database::open_in_memory().expect("db");
+        db.upsert_folder("root").expect("folder");
+        db.upsert_photo_facts(&photo.to_string_lossy(), Some(1), 1, 1, Some("jpg"))
+            .expect("facts");
+
+        let metadata = std::fs::metadata(&photo).expect("metadata");
+        let modified = metadata
+            .modified()
+            .expect("mtime")
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("epoch");
+        let key = ThumbKey {
+            source: photo.clone(),
+            fingerprint: SourceFingerprint {
+                len: metadata.len(),
+                modified_secs: modified.as_secs() as i64,
+                modified_nanos: modified.subsec_nanos(),
+            },
+            size: ThumbSize::Normal,
+        };
+
+        let mut app = PinacotecaApp {
+            db: Some(db),
+            entries: vec![Entry {
+                path: photo.clone(),
+                name: file_name(&photo),
+                key,
+                rating: 0,
+            }],
+            ..PinacotecaApp::default()
+        };
+        app.import_picasa_ini();
+
+        let db = app.db.as_ref().expect("db");
+        let stored = db
+            .photo_by_path(&photo.to_string_lossy())
+            .expect("row")
+            .expect("photo");
+        assert_eq!(stored.rating, 4);
+        assert_eq!(app.entries[0].rating, 4);
+
+        let mut names: Vec<String> = db
+            .list_tags()
+            .expect("tags")
+            .into_iter()
+            .map(|t| t.name)
+            .collect();
+        names.sort();
+        assert_eq!(names, ["beach", "family"]);
+
+        // Read-only: the file on disk is byte-for-byte unchanged.
+        assert_eq!(
+            std::fs::read_to_string(dir.join(".picasa.ini")).expect("ini"),
+            ini_text
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

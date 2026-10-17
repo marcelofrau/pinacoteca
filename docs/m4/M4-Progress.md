@@ -80,3 +80,36 @@ Validation: fmt clean, clippy clean (`-D warnings`), **74 tests**, 8 in
 
 Still open in M4: remove-from-album and drag-and-drop reordering, folder views,
 the album dialog fields (the columns exist), and the `.picasa.ini` album import.
+
+## Step 3 — folder views and `.picasa.ini` import
+
+**Folder views** were cheap: `View::Folder(PathBuf)` filters the scan result by
+parent directory, and the sidebar lists the distinct folders that actually hold
+photos. No extra storage — a folder view is a projection of the scan, which is
+why `View` lost `Copy` and is matched by reference now.
+
+**`.picasa.ini` import** is the backward-compatibility piece. The parser
+(`pinacoteca-core::picasa_ini`) is pure and read-only:
+
+| Key | Imported | Note |
+|---|---|---|
+| `star=` | yes | clamped to 0..=5 |
+| `caption=` | yes | |
+| `keywords=` | yes | split on commas into `tags` |
+| `hidden=` | parsed | not yet surfaced in the UI |
+| `rotate=` | parsed | wrapped modulo 4; not yet applied |
+| `albums=` | parsed, **not imported** | Picasa stores opaque tokens and resolves the names in its obfuscated `albums_0.db`, so membership cannot be recovered from the INI alone |
+
+The INI is never rewritten, so a library that Picasa still manages keeps
+working; unknown keys survive untouched. `picasa_ini_import_restores_stars_and_keywords`
+asserts the round-trip **and** that the file is byte-for-byte unchanged.
+
+Keys are matched case-insensitively and the `Contacts2` section is skipped
+(people are out of scope). The parser is separate from the importer so the
+format can be re-derived without touching catalog code.
+
+Validation: fmt clean, clippy clean (`-D warnings`), **82 tests**, 9 in
+`pinacoteca-app` and 19 in `pinacoteca-core`.
+
+Still open in M4: the album dialog fields, drag-and-drop reordering, applying
+`rotate=` to the viewer, and the docs closeout.

@@ -16,7 +16,10 @@ Exit criteria:
 - [x] UI: stars — keys `0`–`5`, persisted, painted on the grid.
 - [ ] Album metadata: columns exist (`description`, `place_taken`,
       `music_path`, `date`) but the dialog fields are not wired yet.
-- [ ] UI: remove a photo from an album; reorder by drag-and-drop.
-- [ ] UI: folder views.
-- [ ] `.picasa.ini` album import, preserving unknown keys (backward compat).
+- [x] UI: remove a photo from an album — `Delete` (file and catalog row untouched).
+- [ ] UI: reorder an album by drag-and-drop.
+- [x] UI: folder views — `View::Folder(dir)`, listed in the sidebar.
+- [x] `.picasa.ini` album import: stars, captions and keywords restored
+      read-only; album membership deliberately skipped (Picasa stores opaque
+      tokens there and the names live in its obfuscated `albums_0.db`).
 - [ ] Docs updated: architecture, completeness review.
