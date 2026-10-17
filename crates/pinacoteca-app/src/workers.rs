@@ -260,6 +260,115 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn end_to_end_scan_catalog_and_thumbnails() {
+        let dir = std::env::temp_dir().join(format!("pinacoteca-e2e-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+
+        // Two JPEGs (one nested) and one PNG.
+        let jpeg_bytes = |seed: u8| {
+            let pixels: Vec<u8> = (0..48 * 32 * 4)
+                .map(|i| (i as u8).wrapping_add(seed))
+                .collect();
+            let image = pinacoteca_decoders::RgbaImage::new(48, 32, pixels).unwrap();
+            let mut out = Vec::new();
+            jpeg_encoder_encode(&image, &mut out);
+            out
+        };
+        std::fs::write(dir.join("a.jpg"), jpeg_bytes(3)).unwrap();
+        std::fs::write(dir.join("sub/b.jpg"), jpeg_bytes(9)).unwrap();
+        std::fs::write(dir.join("c.png"), make_png(16, 16)).unwrap();
+
+        // 1. Scan.
+        let handle = ScanHandle::start(dir.clone(), 1);
+        let mut photos = Vec::new();
+        let mut done = false;
+        for _ in 0..300 {
+            for message in handle.drain() {
+                match message {
+                    ScanMessage::Photo(photo) => photos.push(photo),
+                    ScanMessage::Done { .. } => done = true,
+                }
+            }
+            if done {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(photos.len(), 3);
+        assert!(done);
+
+        // 2. Persist to the catalog.
+        let db = pinacoteca_db::Database::open_in_memory().unwrap();
+        let folder = db.upsert_folder(&dir.to_string_lossy()).unwrap();
+        for photo in &photos {
+            db.upsert_photo_facts(
+                &photo.path.to_string_lossy(),
+                Some(folder),
+                photo.len as i64,
+                photo.modified_secs,
+                photo.path.extension().and_then(|e| e.to_str()),
+            )
+            .unwrap();
+        }
+        assert_eq!(db.count_photos().unwrap(), 3);
+
+        // 3. Generate thumbnails for every photo.
+        let cache = ThumbCache::new(dir.join("cache"));
+        let mut pool = ThumbPool::new(cache.clone(), 3);
+        let keys: Vec<ThumbKey> = photos
+            .iter()
+            .map(|photo| ThumbKey {
+                source: photo.path.clone(),
+                fingerprint: pinacoteca_render::thumbs::SourceFingerprint::read(&photo.path)
+                    .unwrap(),
+                size: pinacoteca_render::thumbs::ThumbSize::Normal,
+            })
+            .collect();
+        for key in &keys {
+            pool.request(key.clone());
+        }
+
+        let mut produced = 0;
+        for _ in 0..500 {
+            let results = pool.drain();
+            if !results.is_empty() {
+                for (_, result) in results {
+                    assert!(result.is_ok());
+                    produced += 1;
+                }
+                if produced == keys.len() {
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(produced, 3);
+        for key in &keys {
+            assert!(cache.contains(key), "thumbnail must be cached");
+            let bytes = cache.read(key).unwrap().unwrap();
+            let dims = pinacoteca_decoders::jpeg::dimensions_bytes(&bytes).unwrap();
+            assert!(dims.width <= key.size.pixels());
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A minimal 8-bit RGBA PNG.
+    fn make_png(width: u32, height: u32) -> Vec<u8> {
+        let mut out = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut out, width, height);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().unwrap();
+            let pixels: Vec<u8> = (0..width * height * 4).map(|i| (i % 251) as u8).collect();
+            writer.write_image_data(&pixels).unwrap();
+        }
+        out
+    }
+
     fn jpeg_encoder_encode(image: &pinacoteca_decoders::RgbaImage, out: &mut Vec<u8>) {
         let encoder = jpeg_encoder::Encoder::new(out, 80);
         encoder

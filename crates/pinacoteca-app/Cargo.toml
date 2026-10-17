@@ -22,3 +22,4 @@ pinacoteca-render = { path = "../pinacoteca-render" }
 
 [dev-dependencies]
 jpeg-encoder = "0.7.1"
+png = "0.18.1"

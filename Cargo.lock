@@ -2362,6 +2362,7 @@ dependencies = [
  "pinacoteca-db",
  "pinacoteca-decoders",
  "pinacoteca-render",
+ "png",
 ]
 
 [[package]]
@@ -2372,6 +2373,7 @@ dependencies = [
  "jpeg-decoder",
  "kamadak-exif",
  "mozjpeg",
+ "pinacoteca-core",
  "pinacoteca-decoders",
  "pinacoteca-render",
  "png",

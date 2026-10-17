@@ -22,6 +22,7 @@ png = "0.18.1"
 kamadak-exif = "0.6.1"
 pinacoteca-decoders = { path = "../pinacoteca-decoders" }
 pinacoteca-render = { path = "../pinacoteca-render" }
+pinacoteca-core = { path = "../pinacoteca-core" }
 mozjpeg = { version = "0.10", optional = true }
 
 [features]

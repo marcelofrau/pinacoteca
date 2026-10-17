@@ -24,5 +24,7 @@ navigation.
 
 ## Closeout
 
-- [ ] End-to-end check on a real folder; record results
-- [ ] M3 completeness review + verdict
+- [x] End-to-end check on a real folder; record results
+- [x] M3 completeness review + verdict
+- [ ] Slideshow playback (M4: needs the transition layer)
+- [ ] Wire the mip pyramid (`pinacoteca-render::pyramid`) into the viewer
