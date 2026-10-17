@@ -59,4 +59,15 @@ M1 in progress; albums/grid/thumbnails spec pass 5 CLOSED.
 - Wrote `maintenance/geometry-spec.md` with domain-model mapping (NormalizedRect angle_rad quarter_turns).
 
 M1 in progress; geometry sub-spec pass 6 CLOSED.
-Remaining for M1: DB schema derivation from real .db files, final spec completeness pass.
+
+## M1 status (pass 7 — DB/metadata schema from real files)
+- Located the live Picasa catalog on the reference machine: `%LOCALAPPDATA%\Google\Picasa2\db3\` (thumbs, bigthumbs, previews, albums, facetemplates, thumbindex + `*_index.db`) and 143 per-folder `.picasa.ini` files.
+- **Corrected a key assumption:** the `db3` files are **NOT SQLite** (`file is not a database`). They use a private container format: f32 version header (`1.6` for stores, `3.1` for `thumbindex.db`) + u32 count, then records.
+- Image stores (`thumbs_0.db`, `bigthumbs_0.db`, `previews_0.db`) are **concatenated raw JPEG records** with no separators (SOI/EOI back-to-back); lookup is via the `*_index.db` side files. They are pure derived cache.
+- `albums_0.db` payload is compressed/obfuscated (no plaintext album names); full schema recovery needs RE of the `Picasa3.exe` reader, blocked by the Ghidra 330 s deadline + Windows rizin unavailability.
+- **Authoritative layer = `.picasa.ini`** (plaintext INI, CRLF): `[Picasa]` folder keys (`name`, `date`, `P2category`), `[<filename>]` per-photo keys (`star`, `caption`, `keywords`, `rotate`, `crop`, `filters`, `albums`, `hidden`, `geotag`, `text`, `faces`, `backuphash`), and `[Contacts2]` people section. Case-insensitive keys.
+- Defined the import/backward-compat strategy: read-only `.picasa.ini` parse (authoritative), ignore `db3` (derived), preserve unknown keys, non-destructive own-store model.
+- Rewrote `formats/pmp-notes.md` (superseded its TODO section).
+
+M1 in progress; DB/metadata schema pass 7 CLOSED.
+Remaining for M1: final spec completeness pass (cross-cutting review + gap sweep).

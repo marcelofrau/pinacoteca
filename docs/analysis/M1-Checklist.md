@@ -11,5 +11,5 @@
 - [x] Document albums/thumbnails spec
 - [x] Recover DB/store filenames — formats/pmp-notes.md
 - [x] Geometry sub-spec: crop / straighten / rotate canvas model — maintenance/geometry-spec.md (pass 6 closed)
-- [ ] Investigate PMP/DB schema from real .db files
+- [x] Investigate PMP/DB schema from real .db files — formats/pmp-notes.md (pass 7 closed; db3 is a private container, NOT SQLite; `.picasa.ini` is the authoritative layer)
 - [ ] Write behavioral specs sufficient for clean-room reimplementation
