@@ -38,7 +38,7 @@ struct Viewer {
 }
 
 /// Which photos the grid is currently showing.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum View {
     /// Every photo found by the last scan.
     All,
@@ -46,6 +46,8 @@ enum View {
     Album(i64),
     /// Photos selected by a saved query.
     Smart(Smart),
+    /// Photos from one directory of the scanned tree.
+    Folder(PathBuf),
 }
 
 /// Top-level application state.
@@ -186,19 +188,33 @@ impl PinacotecaApp {
     /// Rebuilds the photo list the grid shows from the current [`View`].
     fn rebuild_visible(&mut self) {
         self.selected = 0;
-        let rows = match self.view {
-            View::All => {
-                self.visible = self.entries.clone();
-                return;
+        match &self.view {
+            View::All => self.visible = self.entries.clone(),
+            View::Folder(dir) => {
+                self.visible = self
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.path.parent() == Some(dir.as_path()))
+                    .cloned()
+                    .collect();
             }
-            View::Album(id) => self.db.as_ref().and_then(|db| db.album_photos(id).ok()),
-            View::Smart(smart) => self.db.as_ref().and_then(|db| db.smart_photos(&smart).ok()),
-        };
-        self.visible = rows
-            .unwrap_or_default()
-            .iter()
-            .filter_map(entry_for)
-            .collect();
+            View::Album(id) => {
+                let rows = self.db.as_ref().and_then(|db| db.album_photos(*id).ok());
+                self.visible = rows
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(entry_for)
+                    .collect();
+            }
+            View::Smart(smart) => {
+                let rows = self.db.as_ref().and_then(|db| db.smart_photos(smart).ok());
+                self.visible = rows
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(entry_for)
+                    .collect();
+            }
+        }
     }
 
     /// Paints the stored ratings onto the scanned entries.
@@ -240,6 +256,23 @@ impl PinacotecaApp {
         self.status = format!("{name}: {rating} star(s)");
     }
 
+    /// Removes the selected photo from an album. Disk is never touched.
+    fn remove_selected_from_album(&mut self, album_id: i64) {
+        let Some(entry) = self.visible.get(self.selected) else {
+            return;
+        };
+        let path = entry.path.to_string_lossy().into_owned();
+        if let Some(db) = &self.db
+            && let Err(error) = db.remove_photo(album_id, &path)
+        {
+            self.status = format!("album: {error}");
+            return;
+        }
+        self.status = "Removed from album (file untouched).".into();
+        self.refresh_albums();
+        self.rebuild_visible();
+    }
+
     /// The album sidebar: all photos, smart albums and manual albums.
     fn sidebar_ui(&mut self, ctx: &egui::Context) {
         let mut pick: Option<View> = None;
@@ -273,6 +306,29 @@ impl PinacotecaApp {
                         .clicked()
                     {
                         pick = Some(View::Smart(smart));
+                    }
+                }
+
+                ui.add_space(8.0);
+                ui.strong("Folders");
+                let mut folders: Vec<PathBuf> = self
+                    .entries
+                    .iter()
+                    .filter_map(|entry| entry.path.parent().map(Path::to_path_buf))
+                    .collect();
+                folders.sort();
+                folders.dedup();
+                for folder in folders {
+                    let label = folder
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| folder.to_string_lossy().into_owned());
+                    if ui
+                        .selectable_label(self.view == View::Folder(folder.clone()), label)
+                        .on_hover_text(folder.to_string_lossy())
+                        .clicked()
+                    {
+                        pick = Some(View::Folder(folder));
                     }
                 }
 
@@ -723,6 +779,11 @@ impl PinacotecaApp {
         if let Some(rating) = rating {
             self.rate_selected(rating);
         }
+        if ctx.input(|i| i.key_pressed(egui::Key::Delete))
+            && let View::Album(album_id) = self.view.clone()
+        {
+            self.remove_selected_from_album(album_id);
+        }
         let columns = columns_for(ctx.content_rect().width(), CELL, GAP);
         let last = self.visible.len() - 1;
         let mut selected = self.selected;
@@ -794,7 +855,7 @@ impl eframe::App for PinacotecaApp {
                     .unwrap_or("—");
                 ui.label(format!("{}   |   {selected}", self.status));
                 ui.separator();
-                ui.label("0-5 stars   Enter open   Esc close");
+                ui.label("0-5 stars   Enter open   Esc close   Del remove from album");
                 if self.viewer.is_some() {
                     ui.separator();
                     ui.label("zoom  +/-   1:1  Space/Esc");
