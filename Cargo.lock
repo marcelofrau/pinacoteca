@@ -2357,7 +2357,11 @@ name = "pinacoteca-app"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "jpeg-encoder",
  "pinacoteca-core",
+ "pinacoteca-db",
+ "pinacoteca-decoders",
+ "pinacoteca-render",
 ]
 
 [[package]]

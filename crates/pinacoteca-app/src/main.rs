@@ -5,6 +5,7 @@
 //! files.
 
 mod app;
+mod workers;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {

@@ -144,6 +144,7 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 }
 
 /// A content-addressed on-disk thumbnail cache.
+#[derive(Debug, Clone)]
 pub struct ThumbCache {
     root: PathBuf,
 }

@@ -16,11 +16,11 @@ navigation.
 
 ## UI
 
-- [ ] Dark theme shell
-- [ ] Thumbnail grid (virtualised) with bottom bar
-- [ ] Keyboard navigation (arrows, enter, esc, space, f)
-- [ ] Fullscreen viewer: zoom (+, -, 1), pan (drag), fit/actual size
-- [ ] EXIF orientation applied in the viewer
+- [x] Dark theme shell
+- [x] Thumbnail grid (virtualised) with bottom bar
+- [x] Keyboard navigation (arrows, enter, esc, space, f)
+- [x] Fullscreen viewer: zoom (+, -, 1), pan (drag), fit/actual size
+- [x] EXIF orientation applied in the viewer
 
 ## Closeout
 
