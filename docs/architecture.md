@@ -20,7 +20,7 @@ flowchart TB
         EDIT[Edit stack]
     end
     DEC[pinacoteca-decoders<br/>zune-jpeg + png]
-    DB[(pinacoteca-db<br/>SQLite schema v2)]
+    DB[(pinacoteca-db<br/>SQLite schema v3)]
     CACHE[(Thumbnail cache<br/>on disk)]
     TITLEBIN[pinacoteca-bench<br/><i>analysis tool, not shipped</i>]
 
@@ -109,7 +109,7 @@ The benchmark that decided this is in [`m2/decoder-benchmark.md`](m2/decoder-ben
 
 ## Storage
 
-SQLite (schema v2, [ADR-0004](adr/0004-database-schema-v1.md)) holds the catalog
+SQLite (schema v3, [ADR-0004](adr/0004-database-schema-v1.md)) holds the catalog
 and all user state:
 
 - folders and photos (indexed library, with dimensions, orientation, date taken),
@@ -118,6 +118,13 @@ and all user state:
 - edit stacks (ordered non-destructive operations, one JSON row per op).
 
 The original image files are treated as read-only inputs and are never rewritten.
+
+Existing Picasa libraries are picked up in place: the per-folder `.picasa.ini`
+is parsed read-only for stars, captions and keywords
+(`pinacoteca-core::picasa_ini`), and the file itself is never modified, so a
+library that Picasa still manages keeps working. Album membership is
+deliberately not imported — Picasa stores opaque tokens there and resolves the
+names in its own obfuscated database.
 
 The database lives under the user's local application data directory, e.g.
 `%LOCALAPPDATA%\Pinacoteca`. The thumbnail cache ([ADR-0003](adr/0003-thumbnail-cache.md))
