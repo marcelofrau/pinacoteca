@@ -28,3 +28,25 @@ Choices worth recording:
 
 Tests: 107 across the workspace (39 in `pinacoteca-render`, 27 in
 `pinacoteca-db`).
+
+## Step 2 — the edit panel
+
+Landed:
+
+- `pinacoteca-app::editor` — `Editor` holds the unedited preview pixels, the
+  stack, and the live texture. `refresh` replays the stack over those pixels, so
+  the same `edits::apply` path serves preview and saved result.
+- The panel: rotate left/right, Brightness / Contrast / Saturation / Warmth
+  sliders, Sharpen, one-click Auto fix / B&W / Sepia, Undo and Reset; Save and
+  Close in the panel footer. Key `E` opens it, `Esc` closes it.
+- `EditStack::set` replaces every operation of the same kind, so dragging a
+  slider cannot stack a hundred Brightness ops; `push` still composes, so two
+  rotations really do make a half turn.
+- Saving writes the stack to `edit_ops`; the decode, the preview and the file
+  reads are all read-only.
+
+Verification: `editing_never_rewrites_the_original_file` encodes a real JPEG,
+opens the editor, applies rotate + brightness + sepia, saves, and asserts the
+file bytes on disk are identical and the stack round-trips through the catalog.
+
+Tests: 109 across the workspace.

@@ -11,6 +11,7 @@ use pinacoteca_db::catalog::PhotoRow;
 use pinacoteca_db::{Database, albums::Smart};
 use pinacoteca_render::thumbs::{SourceFingerprint, ThumbKey, ThumbSize};
 
+use crate::editor::Editor;
 use crate::workers::{ScanHandle, ScanMessage, ThumbPool};
 
 /// Size of a grid cell, in points.
@@ -71,6 +72,8 @@ pub struct PinacotecaApp {
     pool: Option<ThumbPool>,
     textures: HashMap<String, egui::TextureHandle>,
     viewer: Option<Viewer>,
+    /// The open edit panel, if any.
+    editor: Option<Editor>,
     status: String,
     /// Album list shown in the sidebar.
     albums: Vec<AlbumRow>,
@@ -111,6 +114,7 @@ impl Default for PinacotecaApp {
             pool: None,
             textures: HashMap::new(),
             viewer: None,
+            editor: None,
             albums,
             view: View::All,
             visible: Vec::new(),
@@ -868,6 +872,79 @@ impl PinacotecaApp {
         }
     }
 
+    /// Opens the edit panel over the selected photo.
+    ///
+    /// The preview base is decoded once at preview resolution; every later
+    /// change replays the stack over those pixels, so the original file is only
+    /// ever read.
+    fn open_editor(&mut self) {
+        let Some(entry) = self.visible.get(self.selected) else {
+            return;
+        };
+        let path = entry.path.clone();
+        let filename = entry.name.clone();
+
+        let registry = pinacoteca_decoders::default_registry();
+        let Some(decoder) = registry.decoder_for(&path) else {
+            self.status = "no decoder for this file".into();
+            return;
+        };
+        let base = match decoder.decode(&path) {
+            Ok(image) => {
+                pinacoteca_render::imageops::resize_to_fit(&image, ThumbSize::Preview.pixels())
+            }
+            Err(error) => {
+                self.status = format!("edit: {error}");
+                return;
+            }
+        };
+
+        let stack = self
+            .db
+            .as_ref()
+            .and_then(|db| db.load_edit_stack(&path.to_string_lossy()).ok())
+            .unwrap_or_default();
+
+        self.status = format!("editing {filename}");
+        self.editor = Some(Editor::new(path, filename, base, stack));
+    }
+
+    /// Writes the open editor's stack to the catalog.
+    fn save_editor(&mut self) {
+        let Some(editor) = &self.editor else {
+            return;
+        };
+        let path = editor.path.to_string_lossy().into_owned();
+        let ops = editor.stack.len();
+        if let Some(db) = &self.db
+            && let Err(error) = db.save_edit_stack(&path, &editor.stack)
+        {
+            self.status = format!("edit: {error}");
+            return;
+        }
+        self.status = format!("saved {ops} edit operation(s)");
+    }
+
+    /// Draws the editor's live preview in the central panel.
+    fn editor_preview(&mut self, ctx: &egui::Context) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.painter().rect_filled(
+                ui.max_rect(),
+                egui::CornerRadius::ZERO,
+                egui::Color32::BLACK,
+            );
+            if let Some(editor) = &self.editor {
+                if let Some(texture) = editor.texture() {
+                    draw_fitted(ui.painter(), ui.max_rect(), texture);
+                } else {
+                    ui.centered_and_justified(|ui| {
+                        ui.label("building preview…");
+                    });
+                }
+            }
+        });
+    }
+
     /// Draws the fullscreen viewer overlay.
     fn viewer_ui(&mut self, ctx: &egui::Context) {
         let Some(viewer) = self.viewer.as_ref() else {
@@ -931,7 +1008,7 @@ impl PinacotecaApp {
 
     /// Handles keyboard navigation.
     fn keyboard(&mut self, ctx: &egui::Context) {
-        let (left, right, up, down, enter, escape, plus, minus, zero, space, rating) =
+        let (left, right, up, down, enter, escape, plus, minus, zero, space, rating, edit_key) =
             ctx.input(|i| {
                 let rating = [
                     (egui::Key::Num0, 0),
@@ -956,6 +1033,7 @@ impl PinacotecaApp {
                     i.key_pressed(egui::Key::Num1),
                     i.key_pressed(egui::Key::Space),
                     rating,
+                    i.key_pressed(egui::Key::E),
                 )
             });
 
@@ -978,7 +1056,19 @@ impl PinacotecaApp {
             return;
         }
 
+        if self.editor.is_some() {
+            if escape {
+                self.editor = None;
+            }
+            return;
+        }
+
         if self.visible.is_empty() {
+            return;
+        }
+
+        if edit_key {
+            self.open_editor();
             return;
         }
         if let Some(rating) = rating {
@@ -1060,7 +1150,7 @@ impl eframe::App for PinacotecaApp {
                     .unwrap_or("—");
                 ui.label(format!("{}   |   {selected}", self.status));
                 ui.separator();
-                ui.label("0-5 stars   Enter open   Esc close   Del remove   drag: reorder / drop on album");
+                ui.label("0-5 stars   E edit   Enter open   Esc close   Del remove   drag: reorder / drop on album");
                 if self.viewer.is_some() {
                     ui.separator();
                     ui.label("zoom  +/-   1:1  Space/Esc");
@@ -1070,6 +1160,34 @@ impl eframe::App for PinacotecaApp {
 
         if self.viewer.is_some() {
             self.viewer_ui(ctx);
+        } else if self.editor.is_some() {
+            let mut save = false;
+            let mut close = false;
+            {
+                let editor = self.editor.as_mut().expect("checked above");
+                editor.refresh(ctx);
+                egui::SidePanel::right("editor")
+                    .default_width(280.0)
+                    .show(ctx, |ui| {
+                        editor.ui(ui);
+                        ui.separator();
+                        ui.horizontal(|ui| {
+                            if ui.button("Save").clicked() {
+                                save = true;
+                            }
+                            if ui.button("Close").clicked() {
+                                close = true;
+                            }
+                        });
+                    });
+            }
+            self.editor_preview(ctx);
+            if save {
+                self.save_editor();
+            }
+            if close {
+                self.editor = None;
+            }
         } else {
             self.sidebar_ui(ctx);
             egui::CentralPanel::default().show(ctx, |ui| {
@@ -1090,6 +1208,7 @@ impl eframe::App for PinacotecaApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pinacoteca_core::edit::{EditOp, Effect, Rotation};
 
     #[test]
     fn columns_fit_available_width() {
@@ -1340,6 +1459,94 @@ mod tests {
 
         assert_eq!(album_order(&app, album), ["c.jpg", "a.jpg", "b.jpg"]);
         assert!(app.dragging.is_none(), "the drag ends once it is dropped");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The whole point of the stack: editing must not touch the file.
+    #[test]
+    fn editing_never_rewrites_the_original_file() {
+        let dir = std::env::temp_dir().join(format!("pinacoteca-edit-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        // A real JPEG, so the editor's decode path runs for real.
+        let pixels: Vec<u8> = (0..8 * 8)
+            .flat_map(|i| [(i * 3) as u8, 40, 200, 255])
+            .collect();
+        let source = pinacoteca_decoders::RgbaImage::new(8, 8, pixels).expect("source");
+        let mut encoded = Vec::new();
+        jpeg_encoder::Encoder::new(&mut encoded, 90)
+            .encode(&source.pixels, 8, 8, jpeg_encoder::ColorType::Rgba)
+            .expect("encode");
+
+        let photo = dir.join("IMG_0007.JPG");
+        std::fs::write(&photo, &encoded).expect("write");
+        let before = std::fs::read(&photo).expect("read back");
+
+        let db = Database::open_in_memory().expect("db");
+        db.upsert_folder("C:/pics").expect("folder");
+        db.upsert_photo_facts(
+            &photo.to_string_lossy(),
+            Some(1),
+            encoded.len() as i64,
+            1,
+            Some("jpg"),
+        )
+        .expect("facts");
+
+        let metadata = std::fs::metadata(&photo).expect("metadata");
+        let modified = metadata
+            .modified()
+            .expect("mtime")
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("epoch");
+        let entry = Entry {
+            path: photo.clone(),
+            name: file_name(&photo),
+            key: ThumbKey {
+                source: photo.clone(),
+                fingerprint: SourceFingerprint {
+                    len: metadata.len(),
+                    modified_secs: modified.as_secs() as i64,
+                    modified_nanos: modified.subsec_nanos(),
+                },
+                size: ThumbSize::Normal,
+            },
+            rating: 0,
+        };
+
+        let mut app = PinacotecaApp {
+            db: Some(db),
+            entries: vec![entry.clone()],
+            visible: vec![entry],
+            ..PinacotecaApp::default()
+        };
+
+        app.open_editor();
+        let editor = app.editor.as_mut().expect("editor opened");
+        assert!(editor.stack.is_empty(), "a fresh photo has no edits");
+
+        editor.stack.push(EditOp::Rotate(Rotation::Cw90));
+        editor.stack.push(EditOp::Brightness(30));
+        editor.stack.set(EditOp::Effect(Effect::Sepia));
+        let touched = editor.stack.clone();
+
+        app.save_editor();
+
+        // The file on disk is byte-identical.
+        let after = std::fs::read(&photo).expect("read again");
+        assert_eq!(before, after, "editing must not rewrite the original");
+
+        // And the stack round-trips through the catalog.
+        let stored = app
+            .db
+            .as_ref()
+            .expect("db")
+            .load_edit_stack(&photo.to_string_lossy())
+            .expect("load");
+        assert_eq!(stored, touched);
+        assert_eq!(touched.len(), 3);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

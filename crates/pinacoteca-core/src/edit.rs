@@ -77,6 +77,18 @@ impl EditStack {
         self.ops.push(op);
     }
 
+    /// Replaces every operation of the same kind with `op`.
+    ///
+    /// Sliders use this: dragging Brightness must not stack a hundred
+    /// Brightness operations, but geometry uses [`push`](Self::push) so two
+    /// rotations really do compose.
+    pub fn set(&mut self, op: EditOp) {
+        let kind = std::mem::discriminant(&op);
+        self.ops
+            .retain(|existing| std::mem::discriminant(existing) != kind);
+        self.ops.push(op);
+    }
+
     /// Removes and returns the most recently applied operation.
     pub fn undo(&mut self) -> Option<EditOp> {
         self.ops.pop()
@@ -148,5 +160,23 @@ mod tests {
         let op = EditOp::Sharpen(8);
         let json = serde_json::to_string(&op).unwrap();
         assert_eq!(serde_json::from_str::<EditOp>(&json).unwrap(), op);
+    }
+
+    #[test]
+    fn set_replaces_the_same_kind_but_push_composes() {
+        let mut stack = EditStack::new();
+        stack.set(EditOp::Brightness(10));
+        stack.set(EditOp::Brightness(30));
+        assert_eq!(stack.ops(), &[EditOp::Brightness(30)]);
+
+        // A different kind is kept.
+        stack.set(EditOp::Contrast(5));
+        assert_eq!(stack.len(), 2);
+
+        // Push, by contrast, keeps duplicates so rotations compose.
+        let mut rotations = EditStack::new();
+        rotations.push(EditOp::Rotate(Rotation::Cw90));
+        rotations.push(EditOp::Rotate(Rotation::Cw90));
+        assert_eq!(rotations.len(), 2);
     }
 }

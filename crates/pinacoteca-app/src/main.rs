@@ -5,6 +5,7 @@
 //! files.
 
 mod app;
+mod editor;
 mod workers;
 
 fn main() -> eframe::Result<()> {

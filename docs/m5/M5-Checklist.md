@@ -19,6 +19,6 @@ Exit criteria:
       boundary in `#1204`).
 - [x] `RedEye` within a rectangle.
 - [x] Persistence: one `edit_ops` row per op, replayed and reorderable.
-- [ ] UI: edit panel with sliders, live preview, undo/reset.
-- [ ] The original file is byte-identical before and after editing (test).
+- [x] UI: edit panel with sliders, live preview, undo/reset.
+- [x] The original file is byte-identical before and after editing (test).
 - [ ] Docs: `M5-Completeness.md`, architecture update.
