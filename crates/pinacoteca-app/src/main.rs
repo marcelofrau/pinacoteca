@@ -9,6 +9,10 @@ mod editor;
 mod workers;
 
 fn main() -> eframe::Result<()> {
+    // An optional folder argument prefills the library path, so
+    // `cargo run -p pinacoteca-app -- D:\Pictures` opens straight into it.
+    let folder = std::env::args().nth(1).unwrap_or_default();
+
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Pinacoteca")
@@ -20,6 +24,12 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Pinacoteca",
         options,
-        Box::new(|_cc| Ok(Box::new(app::PinacotecaApp::default()))),
+        Box::new(move |_cc| {
+            let mut app = app::PinacotecaApp::default();
+            if !folder.is_empty() {
+                app.set_folder(&folder);
+            }
+            Ok(Box::new(app))
+        }),
     )
 }

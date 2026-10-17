@@ -582,6 +582,15 @@ impl PinacotecaApp {
         }
     }
 
+    /// Prefills the library path and starts scanning it.
+    ///
+    /// Used by the command line, so a script can launch the app directly into a
+    /// folder.
+    pub fn set_folder(&mut self, folder: &str) {
+        self.folder_input = folder.to_string();
+        self.open_folder();
+    }
+
     /// Starts scanning the folder typed in the input field.
     fn open_folder(&mut self) {
         let root = PathBuf::from(self.folder_input.trim());
@@ -1549,5 +1558,29 @@ mod tests {
         assert_eq!(touched.len(), 3);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_folder_prefills_the_box_and_starts_a_scan() {
+        let dir = std::env::temp_dir().join(format!("pinacoteca-setfolder-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        let mut app = PinacotecaApp::default();
+        app.set_folder(&dir.to_string_lossy());
+
+        assert_eq!(app.folder_input, dir.to_string_lossy());
+        assert!(app.scan.is_some(), "set_folder starts the scan");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_folder_refuses_a_path_that_is_not_a_folder() {
+        let mut app = PinacotecaApp::default();
+        app.set_folder("C:/definitely/not/here");
+
+        assert!(app.scan.is_none(), "no scan starts for a missing folder");
+        assert!(app.status.contains("Not a folder"), "{}", app.status);
     }
 }

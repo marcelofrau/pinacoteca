@@ -86,16 +86,36 @@ Details, benchmarks and the reasoning behind these choices live in
 ## Building
 
 ```sh
-# Requires a recent stable Rust toolchain (see rust-version in Cargo.toml).
+# Needs the pinned toolchain (rust-toolchain.toml, 1.98.0); rustup selects it.
 cargo build --release
-cargo run -p pinacoteca
+cargo run --release -p pinacoteca-app -- /path/to/photos
 ```
 
-Run the full check suite:
+The folder argument is optional: without it the app opens with an empty folder
+box.
+
+### Helper scripts
+
+`scripts/` wraps these commands as PowerShell (`.ps1`) and shell (`.sh`):
+
+| Task | PowerShell | shell |
+| --- | --- | --- |
+| Debug build | `.\scripts\build.ps1` | `scripts/build.sh` |
+| Release build | `.\scripts\release.ps1` | `scripts/release.sh` |
+| Run (debug) | `.\scripts\run.ps1` | `scripts/run.sh` |
+| Run (release) | `.\scripts\run-release.ps1` | `scripts/run-release.sh` |
+| Tests | `.\scripts\test.ps1` | `scripts/test.sh` |
+| CI gates (fmt + clippy + test) | `.\scripts\check.ps1` | `scripts/check.sh` |
+| Clean | `.\scripts\clean.ps1` | `scripts/clean.sh` |
+| Benchmarks | `.\scripts\bench.ps1` | `scripts/bench.sh` |
+
+See [scripts/README.md](scripts/README.md) for details.
+
+The check suite the scripts run is the same one CI runs:
 
 ```sh
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+cargo clippy --all-targets --workspace -- -D warnings
 cargo test --workspace
 ```
 
