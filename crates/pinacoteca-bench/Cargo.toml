@@ -20,6 +20,8 @@ jpeg-decoder = "0.3.2"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
 png = "0.18.1"
 kamadak-exif = "0.6.1"
+pinacoteca-decoders = { path = "../pinacoteca-decoders" }
+pinacoteca-render = { path = "../pinacoteca-render" }
 mozjpeg = { version = "0.10", optional = true }
 
 [features]

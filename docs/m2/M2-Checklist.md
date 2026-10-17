@@ -13,8 +13,9 @@ performance budgets recorded in `docs/architecture.md`.
 
 - [x] **Decoder benchmark** on a real photo set (pure-Rust vs optional native)
       — `pinacoteca-bench` harness + `docs/m2/decoder-benchmark.md`; ADR-0001
-- [ ] **GPU rendering pipeline prototype**: mip/pyramid strategy for instant zoom
-      — ADR-0002
+- [x] **GPU rendering pipeline prototype**: mip/pyramid strategy for instant zoom
+      — `pinacoteca-render` (pyramid + level selection, 6 tests) +
+      `docs/m2/pyramid-benchmark.md`; ADR-0002
 - [ ] **Thumbnail cache design + background worker prototype** — ADR-0003
 - [ ] **Database schema v1** (catalog, albums, tags, ratings, edit stacks)
       — migration + ADR-0004

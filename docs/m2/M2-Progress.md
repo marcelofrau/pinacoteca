@@ -30,3 +30,17 @@ Status: recon complete; ADR scaffold created.
 - CI-equivalent green: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (14 tests).
 
 Status: decoder strategy decided and recorded.
+
+## Step 2 — GPU zoom / pyramid (done)
+- New crate `pinacoteca-render` (graphics-free, headless-testable): `Pyramid`
+  with half-resolution levels + `level_for_scale` selection (≤ ~2× GPU
+  minification). 6 unit tests.
+- Measured pyramid build over a `zune-jpeg` base: **34.84 ms/img, 6.2 levels avg,
+  50.1 MiB → 66.8 MiB (1.33×)** — level 0 dominates memory.
+- Decision (ADR-0002): build the pyramid **lazily for the currently displayed
+  photo** (off the UI thread); select level by zoom scale; upload only needed
+  levels; grid uses thumbnails, not the pyramid; level-0 tiling is a documented
+  follow-up.
+- Evidence: `docs/m2/pyramid-benchmark.md`. Decision: `docs/adr/0002-gpu-zoom-render-pipeline.md`.
+
+Status: zoom/render strategy decided and recorded.

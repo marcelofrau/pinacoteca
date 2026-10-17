@@ -2356,6 +2356,8 @@ dependencies = [
  "jpeg-decoder",
  "kamadak-exif",
  "mozjpeg",
+ "pinacoteca-decoders",
+ "pinacoteca-render",
  "png",
  "zune-jpeg",
 ]
@@ -2374,6 +2376,13 @@ dependencies = [
 [[package]]
 name = "pinacoteca-decoders"
 version = "0.1.0"
+
+[[package]]
+name = "pinacoteca-render"
+version = "0.1.0"
+dependencies = [
+ "pinacoteca-decoders",
+]
 
 [[package]]
 name = "piper"

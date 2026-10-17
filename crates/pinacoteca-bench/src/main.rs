@@ -396,7 +396,64 @@ fn main() {
 
     bench_decoders(&samples, config.reps);
     bench_thumbnails(&samples, config.reps);
+    bench_pyramid(&samples);
     bench_exif(&samples);
+}
+
+/// Decodes a JPEG to RGBA (zune-jpeg RGB output expanded), for pyramid work.
+fn decode_rgba(data: &[u8]) -> Result<pinacoteca_decoders::RgbaImage, String> {
+    let mut decoder = zune_jpeg::JpegDecoder::new(std::io::Cursor::new(data));
+    let rgb = decoder.decode().map_err(|e| format!("{e:?}"))?;
+    let info = decoder.info().ok_or("no image info")?;
+    let width = info.width as u32;
+    let height = info.height as u32;
+    let mut rgba = vec![0u8; width as usize * height as usize * 4];
+    for (i, chunk) in rgb.chunks_exact(3).enumerate() {
+        rgba[i * 4] = chunk[0];
+        rgba[i * 4 + 1] = chunk[1];
+        rgba[i * 4 + 2] = chunk[2];
+        rgba[i * 4 + 3] = 255;
+    }
+    pinacoteca_decoders::RgbaImage::new(width, height, rgba).ok_or_else(|| "bad dimensions".into())
+}
+
+fn bench_pyramid(samples: &[Sample]) {
+    let jpegs: Vec<&Sample> = samples.iter().filter(|s| s.kind == Kind::Jpeg).collect();
+    if jpegs.is_empty() {
+        return;
+    }
+
+    println!("\n== mip pyramid build (over a zune-jpeg base) ==");
+
+    let mut total = Duration::ZERO;
+    let mut count = 0u64;
+    let mut levels_sum = 0u64;
+    let mut base_bytes = 0u64;
+    let mut total_bytes = 0u64;
+
+    for sample in &jpegs {
+        let Ok(base) = decode_rgba(&sample.bytes) else {
+            continue;
+        };
+        let start = Instant::now();
+        let pyramid = pinacoteca_render::Pyramid::from_base(base);
+        total += start.elapsed();
+        count += 1;
+        levels_sum += pyramid.len() as u64;
+        base_bytes += pyramid.base().pixels.len() as u64;
+        total_bytes += pyramid.bytes() as u64;
+        black_box(pyramid.len());
+    }
+
+    let n = count.max(1) as f64;
+    println!(
+        "images: {count}, avg levels {:.1}, build {:.2} ms/img, memory {:.1} MiB base -> {:.1} MiB pyramid ({:.2}x)",
+        levels_sum as f64 / n,
+        total.as_secs_f64() * 1000.0 / n,
+        base_bytes as f64 / n / (1024.0 * 1024.0),
+        total_bytes as f64 / n / (1024.0 * 1024.0),
+        total_bytes as f64 / base_bytes.max(1) as f64
+    );
 }
 
 /// Decodes a JPEG at a reduced IDCT scale (1/1, 1/2, 1/4 or 1/8) chosen so the

@@ -5,6 +5,7 @@ members = [
     "crates/pinacoteca-core",
     "crates/pinacoteca-decoders",
     "crates/pinacoteca-db",
+    "crates/pinacoteca-render",
     "crates/pinacoteca-bench",
 ]
 
