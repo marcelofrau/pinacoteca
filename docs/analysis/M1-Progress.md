@@ -24,3 +24,14 @@ M1 remains in progress; pass 3 (keyboard/slideshow timing) optional before M2 ga
 - Pan-when-zoomed: no dedicated command string; drag-based (`selectiondrag`/`windrag`/`mousedown`) -> runtime-probe candidate. Documented.
 - UI framework likened: viewer uses in-house Fen/yt framework (Fen::TabPanel/MultiPanel/Win32TabPanelImp, ytPanel/ytBasePanel, ytSelectionDragHandler, HSliderFastDrag, transition nodes, Win32WindowImp). Added "UI framework & infrastructure" section to viewer-spec-draft.md.
 - Pass 3 viewer spec now covers: command set, UI events, filmstrip, zoom, keyboard (static-negative + runtime plan), slideshow, pan, framework. Viewer spec pass 3 CLOSED.
+
+## M1 status (pass 4 — Picasa3 maintenance/effects catalog)
+- Picasa3.exe (10 MB) cannot complete REA Ghidra full auto-analysis within the 330s startup deadline; each Ghidra op re-imports ephemerally. Rizin unavailable on Windows native. Pivoted to raw ASCII corpus extraction via PowerShell (84,838 strings, Latin-1 `[\x20-\x7E]{4,}`).
+- Recovered maintenance surface from strings + RTTI: `ID_PICTURE_*` menu command IDs, `IImageFilter`/`CImageFilterFactory`/`CFilterStack`/`EditStack`/`FilterUndoRedoShow`, `RedEyeEdit`/`RetouchEdit`/`PatchEdit`/`CSmartCrop`/`CollagePanel`, and the `glimmer::` effect engine (`CropImageOperation`, `SharpenImageOperation`, `ColorMatrixImageOperation`, EffectParser effect VM instructions).
+- Identified the shipped source of truth for the maintenance catalog: `runtime/filterdesc.xml` (63 KB) — defines every filter/effect with id, mode, zerostate, label, tooltip, sliders, and optional Glimmer recipe.
+- Extracted the FULL catalog: **84 filter entries** with mode (history/soft/oneclick/effect/tool), zerostate, label, tooltip, and numeric slider definitions (range/offset/log/default). Native parameterised filters (Sharpen, Soft Focus, Focal B&W, Glow, Saturation, Color Temperature, Shadow & Highlight, Contrast, Gamma, Blur, Backlight, Directional *, Focal Pixelate, etc.) plus 36 recipe-driven Glimmer creative effects (Boost…Vignette).
+- Clean-room boundary set (PROJECT_RULES #1204): spec documents the CATALOG only; Glimmer effect recipe bodies are reference-only and must be re-derived.
+- Wrote `maintenance/maintenance-spec.md` with the full catalog, mode/zerostate semantics, slider semantics, control types, edit-engine architecture, menu IDs, and domain-model mapping. `maintenance-draft.md` superseded.
+- Remaining: albums/grid/thumbnails spec (resource + string survey), geometry sub-spec (crop/straighten/rotate), PMP/DB schema.
+
+M1 in progress; maintenance spec pass 4 CLOSED.

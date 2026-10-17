@@ -4,8 +4,11 @@
 - [x] REA Ghidra provider healthy; handle Windows ACL/bridge temp copy
 - [x] Collect resource-driven hints (.fen/.ui/.yt, constants.ui, properties.xml)
 - [x] Plan string-driven + resource-driven REA (avoid full procedure enum timeouts)
-- [ ] PicasaPhotoViewer.exe: map viewer behaviors (fullscreen/zoom/pan/filmstrip/slideshow/nav)
-- [ ] Picasa3.exe: map albums/grid/thumbnails + maintenance actions
-- [ ] Document viewer/albums/maintenance/thumbnails specs
+- [x] PicasaPhotoViewer.exe: map viewer behaviors (fullscreen/zoom/pan/filmstrip/slideshow/nav) — viewer-spec-draft.md (pass 3 closed)
+- [ ] Picasa3.exe: map albums/grid/thumbnails
+- [x] Picasa3.exe: map maintenance actions — maintenance-spec.md (pass 4 closed, 84-filter catalog)
+- [x] Document maintenance spec
+- [ ] Document albums/thumbnails spec
+- [ ] Geometry sub-spec: crop / straighten / rotate canvas model
 - [ ] Investigate PMP/DB schema from code references
 - [ ] Write behavioral specs sufficient for clean-room reimplementation
