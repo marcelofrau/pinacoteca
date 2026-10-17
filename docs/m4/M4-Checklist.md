@@ -5,14 +5,18 @@ tags, smart algorithms, folder views.*
 
 Exit criteria:
 
-- [ ] Album model and persistence: virtual albums referencing photos by id,
+- [x] Album model and persistence: virtual albums referencing photos by id,
       never by file (no album edit can delete or move a photo).
-- [ ] Album ordering: user-defined `position`, dense and zero-based.
-- [ ] Album metadata: the fields the album dialog exposes (description, place
-      taken, music, date) are stored and round-trip.
-- [ ] Keywords: per photo, case-insensitive, searchable by name.
-- [ ] Smart albums: recomputed from the catalog, not stored.
-- [ ] UI: album list, create album, add/remove photos, stars in the grid.
+- [x] Album ordering: user-defined `position`, dense and zero-based. Reordering
+      moves photos to the front and never drops one.
+- [x] Keywords: per photo, case-insensitive, searchable by name.
+- [x] Smart albums: recomputed from the catalog, not stored (`Smart::Recent`,
+      `Starred`, `Year`, `Month`).
+- [x] UI: album list with photo counts, create album, add selected photo.
+- [x] UI: stars — keys `0`–`5`, persisted, painted on the grid.
+- [ ] Album metadata: columns exist (`description`, `place_taken`,
+      `music_path`, `date`) but the dialog fields are not wired yet.
+- [ ] UI: remove a photo from an album; reorder by drag-and-drop.
 - [ ] UI: folder views.
 - [ ] `.picasa.ini` album import, preserving unknown keys (backward compat).
 - [ ] Docs updated: architecture, completeness review.

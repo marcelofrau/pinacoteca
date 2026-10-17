@@ -49,3 +49,34 @@ the non-destructive behaviour explicitly.
 
 Validation: fmt clean, clippy clean (`-D warnings`), **73 tests** passing
 (19 in `pinacoteca-db`).
+
+## Step 2 — album sidebar, smart-album views and stars
+
+The grid used to show only the scan result. It now renders a [`View`], and the
+album sidebar drives which one:
+
+- `View::All` — the last scan;
+- `View::Album(id)` — `album_photos` in user order;
+- `View::Smart(smart)` — a saved query, recomputed every time it is opened.
+
+Album entries are built by `entry_for`, which **re-stats the file** instead of
+trusting the row's stored size and mtime. That is deliberate: the scanner builds
+its `ThumbKey` from the live file metadata, so re-reading it makes an album entry
+produce the *same* key and share one cache file per photo. A test
+(`album_entries_share_the_scanner_thumbnail_key`) pins that invariant, because
+getting it wrong would silently double every decode and every cache entry.
+
+Stars are stored through `set_photo_rating`, painted on the grid cell as a small
+bar of yellow marks, and bound to keys `0`–`5` (0 clears). `ratings_by_path`
+loads every stored rating in one query after a scan, so painting the grid does
+not query per cell.
+
+Sidebar actions: create album, add the selected photo, delete album. Deleting an
+album removes rows from `albums` only — the `ON DELETE CASCADE` clears
+membership, and the photos stay in the catalog.
+
+Validation: fmt clean, clippy clean (`-D warnings`), **74 tests**, 8 in
+`pinacoteca-app`.
+
+Still open in M4: remove-from-album and drag-and-drop reordering, folder views,
+the album dialog fields (the columns exist), and the `.picasa.ini` album import.

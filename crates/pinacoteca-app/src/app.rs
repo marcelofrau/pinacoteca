@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use eframe::egui;
 
 use pinacoteca_core::scan::DiscoveredPhoto;
-use pinacoteca_db::Database;
+use pinacoteca_db::albums::AlbumRow;
+use pinacoteca_db::catalog::PhotoRow;
+use pinacoteca_db::{Database, albums::Smart};
 use pinacoteca_render::thumbs::{SourceFingerprint, ThumbKey, ThumbSize};
 
 use crate::workers::{ScanHandle, ScanMessage, ThumbPool};
@@ -19,10 +21,13 @@ const GAP: f32 = 8.0;
 const REQUESTS_PER_FRAME: usize = 64;
 
 /// One photo in the grid.
+#[derive(Clone)]
 struct Entry {
     path: PathBuf,
     name: String,
     key: ThumbKey,
+    /// Stored rating, 0..=5.
+    rating: u8,
 }
 
 /// The viewer overlay state.
@@ -30,6 +35,17 @@ struct Viewer {
     key: ThumbKey,
     zoom: f32,
     offset: egui::Vec2,
+}
+
+/// Which photos the grid is currently showing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum View {
+    /// Every photo found by the last scan.
+    All,
+    /// Photos inside one manual album.
+    Album(i64),
+    /// Photos selected by a saved query.
+    Smart(Smart),
 }
 
 /// Top-level application state.
@@ -45,6 +61,14 @@ pub struct PinacotecaApp {
     textures: HashMap<String, egui::TextureHandle>,
     viewer: Option<Viewer>,
     status: String,
+    /// Album list shown in the sidebar.
+    albums: Vec<AlbumRow>,
+    /// What the grid is showing.
+    view: View,
+    /// Name typed for a new album.
+    new_album: String,
+    /// Photos shown under the current [`View`].
+    visible: Vec<Entry>,
 }
 
 impl Default for PinacotecaApp {
@@ -57,6 +81,10 @@ impl Default for PinacotecaApp {
                 None
             }
         };
+        let albums = db
+            .as_ref()
+            .and_then(|db| db.list_albums().ok())
+            .unwrap_or_default();
         Self {
             db,
             folder_input: std::env::var("PINACOTECA_FOLDER").unwrap_or_default(),
@@ -68,6 +96,10 @@ impl Default for PinacotecaApp {
             pool: None,
             textures: HashMap::new(),
             viewer: None,
+            albums,
+            view: View::All,
+            visible: Vec::new(),
+            new_album: String::new(),
             status,
         }
     }
@@ -111,7 +143,229 @@ fn file_name(path: &Path) -> String {
         .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
+/// Builds a grid entry for a stored photo.
+///
+/// The file's fingerprint is re-read here instead of being persisted, so an
+/// album entry gets exactly the same thumbnail key the scanner produced and
+/// both views share one cache file per photo.
+fn entry_for(row: &PhotoRow) -> Option<Entry> {
+    let path = PathBuf::from(&row.path);
+    let metadata = std::fs::metadata(&path).ok()?;
+    let modified = metadata
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?;
+    let fingerprint = SourceFingerprint {
+        len: metadata.len(),
+        modified_secs: modified.as_secs() as i64,
+        modified_nanos: modified.subsec_nanos(),
+    };
+    Some(Entry {
+        name: file_name(&path),
+        key: ThumbKey {
+            source: path.clone(),
+            fingerprint,
+            size: ThumbSize::Normal,
+        },
+        path,
+        rating: row.rating,
+    })
+}
+
 impl PinacotecaApp {
+    /// Reloads the album list from the database.
+    fn refresh_albums(&mut self) {
+        let Some(db) = &self.db else { return };
+        match db.list_albums() {
+            Ok(albums) => self.albums = albums,
+            Err(error) => self.status = format!("albums: {error}"),
+        }
+    }
+
+    /// Rebuilds the photo list the grid shows from the current [`View`].
+    fn rebuild_visible(&mut self) {
+        self.selected = 0;
+        let rows = match self.view {
+            View::All => {
+                self.visible = self.entries.clone();
+                return;
+            }
+            View::Album(id) => self.db.as_ref().and_then(|db| db.album_photos(id).ok()),
+            View::Smart(smart) => self.db.as_ref().and_then(|db| db.smart_photos(&smart).ok()),
+        };
+        self.visible = rows
+            .unwrap_or_default()
+            .iter()
+            .filter_map(entry_for)
+            .collect();
+    }
+
+    /// Paints the stored ratings onto the scanned entries.
+    fn apply_stored_ratings(&mut self) {
+        let Some(ratings) = self.db.as_ref().and_then(|db| db.ratings_by_path().ok()) else {
+            return;
+        };
+        for entry in &mut self.entries {
+            let key = entry.path.to_string_lossy().into_owned();
+            if let Some(rating) = ratings.get(&key) {
+                entry.rating = *rating;
+            }
+        }
+    }
+
+    /// Rates the selected photo; 0 clears its star.
+    fn rate_selected(&mut self, rating: u8) {
+        let Some(selected) = self.visible.get(self.selected) else {
+            self.status = "Select a photo first.".into();
+            return;
+        };
+        let path = selected.path.clone();
+        let name = selected.name.clone();
+
+        if let Some(db) = &self.db
+            && let Err(error) = db.set_photo_rating(&path.to_string_lossy(), rating)
+        {
+            self.status = format!("rating: {error}");
+            return;
+        }
+        if let Some(entry) = self.visible.get_mut(self.selected) {
+            entry.rating = rating;
+        }
+        for entry in &mut self.entries {
+            if entry.path == path {
+                entry.rating = rating;
+            }
+        }
+        self.status = format!("{name}: {rating} star(s)");
+    }
+
+    /// The album sidebar: all photos, smart albums and manual albums.
+    fn sidebar_ui(&mut self, ctx: &egui::Context) {
+        let mut pick: Option<View> = None;
+        let mut create = false;
+        let mut add_selected: Option<i64> = None;
+        let mut delete: Option<i64> = None;
+
+        egui::SidePanel::left("albums")
+            .resizable(true)
+            .default_width(220.0)
+            .show(ctx, |ui| {
+                ui.heading("Albums");
+                ui.separator();
+
+                let all_label = format!("All photos ({})", self.entries.len());
+                if ui
+                    .selectable_label(self.view == View::All, all_label)
+                    .clicked()
+                {
+                    pick = Some(View::All);
+                }
+
+                ui.add_space(8.0);
+                ui.strong("Smart");
+                for (smart, label) in [
+                    (Smart::Recent { limit: 100 }, "Recently taken"),
+                    (Smart::Starred { min_rating: 1 }, "Starred"),
+                ] {
+                    if ui
+                        .selectable_label(self.view == View::Smart(smart), label)
+                        .clicked()
+                    {
+                        pick = Some(View::Smart(smart));
+                    }
+                }
+
+                ui.add_space(8.0);
+                ui.strong("Albums");
+                for album in &self.albums {
+                    ui.horizontal(|ui| {
+                        let label = format!("{} ({})", album.name, album.photo_count);
+                        if ui
+                            .selectable_label(self.view == View::Album(album.id), label)
+                            .clicked()
+                        {
+                            pick = Some(View::Album(album.id));
+                        }
+                        if ui
+                            .small_button("+")
+                            .on_hover_text("Add selected photo")
+                            .clicked()
+                        {
+                            add_selected = Some(album.id);
+                        }
+                        if ui.small_button("x").on_hover_text("Delete album").clicked() {
+                            delete = Some(album.id);
+                        }
+                    });
+                }
+
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    let response = ui.add(
+                        egui::TextEdit::singleline(&mut self.new_album)
+                            .hint_text("New album")
+                            .desired_width(150.0),
+                    );
+                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        create = true;
+                    }
+                    if ui.button("+").on_hover_text("Create album").clicked() {
+                        create = true;
+                    }
+                });
+            });
+
+        if let Some(view) = pick {
+            self.view = view;
+            self.rebuild_visible();
+        }
+        if create {
+            let name = self.new_album.trim().to_string();
+            if !name.is_empty() {
+                match self.db.as_ref().map(|db| db.create_album(&name)) {
+                    Some(Ok(_)) => {
+                        self.new_album.clear();
+                        self.refresh_albums();
+                        self.status = format!("album '{name}' created");
+                    }
+                    Some(Err(error)) => self.status = format!("album: {error}"),
+                    None => {}
+                }
+            }
+        }
+        if let Some(album_id) = add_selected {
+            let path = self
+                .visible
+                .get(self.selected)
+                .map(|entry| entry.path.to_string_lossy().into_owned());
+            let Some(path) = path else {
+                self.status = "Select a photo first.".into();
+                return;
+            };
+            match self.db.as_ref().map(|db| db.add_photos(album_id, &[path])) {
+                Some(Ok(_)) => {
+                    self.refresh_albums();
+                    if self.view == View::Album(album_id) {
+                        self.rebuild_visible();
+                    }
+                }
+                Some(Err(error)) => self.status = format!("album: {error}"),
+                None => {}
+            }
+        }
+        if let Some(album_id) = delete {
+            if let Some(db) = &self.db {
+                let _ = db.delete_album(album_id);
+            }
+            if self.view == View::Album(album_id) {
+                self.view = View::All;
+            }
+            self.refresh_albums();
+            self.rebuild_visible();
+        }
+    }
+
     /// Starts scanning the folder typed in the input field.
     fn open_folder(&mut self) {
         let root = PathBuf::from(self.folder_input.trim());
@@ -172,6 +426,7 @@ impl PinacotecaApp {
                             name: file_name(&photo.path),
                             path: photo.path.clone(),
                             key: key_for(&photo, ThumbSize::Normal),
+                            rating: 0,
                         });
                     }
                     ScanMessage::Done { photos, errors } => {
@@ -182,6 +437,9 @@ impl PinacotecaApp {
             }
             if finished {
                 self.scan = None;
+                self.apply_stored_ratings();
+                self.view = View::All;
+                self.rebuild_visible();
             }
         }
 
@@ -236,7 +494,7 @@ const SELECTED_BG: egui::Color32 = egui::Color32::from_rgb(37, 100, 139);
 impl PinacotecaApp {
     /// Draws the thumbnail grid.
     fn grid_ui(&mut self, ui: &mut egui::Ui) {
-        if self.entries.is_empty() {
+        if self.visible.is_empty() {
             ui.centered_and_justified(|ui| {
                 ui.label("No photos. Open a folder above.");
             });
@@ -244,7 +502,7 @@ impl PinacotecaApp {
         }
 
         let columns = columns_for(ui.available_width(), CELL, GAP);
-        let count = self.entries.len();
+        let count = self.visible.len();
         let mut cells: Vec<(usize, egui::Rect, egui::Response)> = Vec::new();
 
         egui::ScrollArea::vertical()
@@ -272,7 +530,7 @@ impl PinacotecaApp {
         let mut opened = None;
 
         for (index, rect, response) in cells {
-            let key = self.entries[index].key.clone();
+            let key = self.visible[index].key.clone();
             self.ensure_texture(&ctx, &key, &mut budget);
 
             let background = if index == self.selected {
@@ -285,6 +543,30 @@ impl PinacotecaApp {
 
             if let Some(texture) = self.textures.get(&texture_name(&key)) {
                 draw_fitted(ui.painter(), rect, texture);
+            }
+
+            let rating = self.visible[index].rating;
+            if rating > 0 {
+                let painter = ui.painter();
+                let strip = egui::Rect::from_min_size(
+                    egui::pos2(rect.left(), rect.bottom() - 12.0),
+                    egui::vec2(rect.width(), 12.0),
+                );
+                painter.rect_filled(
+                    strip,
+                    egui::CornerRadius::ZERO,
+                    egui::Color32::from_black_alpha(140),
+                );
+                let star = egui::vec2(7.0, 7.0);
+                let mut at = egui::pos2(rect.left() + 4.0, rect.bottom() - 9.5);
+                for _ in 0..rating {
+                    painter.rect_filled(
+                        egui::Rect::from_min_size(at, star),
+                        egui::CornerRadius::ZERO,
+                        egui::Color32::from_rgb(255, 196, 32),
+                    );
+                    at.x += 9.0;
+                }
             }
 
             if response.clicked() {
@@ -306,7 +588,7 @@ impl PinacotecaApp {
 
     /// Opens the full-resolution viewer for a grid index.
     fn open_viewer(&mut self, index: usize) {
-        let Some(entry) = self.entries.get(index) else {
+        let Some(entry) = self.visible.get(index) else {
             return;
         };
         let key = ThumbKey {
@@ -388,20 +670,33 @@ impl PinacotecaApp {
 
     /// Handles keyboard navigation.
     fn keyboard(&mut self, ctx: &egui::Context) {
-        let (left, right, up, down, enter, escape, plus, minus, zero, space) = ctx.input(|i| {
-            (
-                i.key_pressed(egui::Key::ArrowLeft),
-                i.key_pressed(egui::Key::ArrowRight),
-                i.key_pressed(egui::Key::ArrowUp),
-                i.key_pressed(egui::Key::ArrowDown),
-                i.key_pressed(egui::Key::Enter),
-                i.key_pressed(egui::Key::Escape),
-                i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals),
-                i.key_pressed(egui::Key::Minus),
-                i.key_pressed(egui::Key::Num1),
-                i.key_pressed(egui::Key::Space),
-            )
-        });
+        let (left, right, up, down, enter, escape, plus, minus, zero, space, rating) =
+            ctx.input(|i| {
+                let rating = [
+                    (egui::Key::Num0, 0),
+                    (egui::Key::Num1, 1),
+                    (egui::Key::Num2, 2),
+                    (egui::Key::Num3, 3),
+                    (egui::Key::Num4, 4),
+                    (egui::Key::Num5, 5),
+                ]
+                .into_iter()
+                .find(|(key, _)| i.key_pressed(*key))
+                .map(|(_, value)| value);
+                (
+                    i.key_pressed(egui::Key::ArrowLeft),
+                    i.key_pressed(egui::Key::ArrowRight),
+                    i.key_pressed(egui::Key::ArrowUp),
+                    i.key_pressed(egui::Key::ArrowDown),
+                    i.key_pressed(egui::Key::Enter),
+                    i.key_pressed(egui::Key::Escape),
+                    i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals),
+                    i.key_pressed(egui::Key::Minus),
+                    i.key_pressed(egui::Key::Num1),
+                    i.key_pressed(egui::Key::Space),
+                    rating,
+                )
+            });
 
         if self.viewer.is_some() {
             if let Some(viewer) = self.viewer.as_mut() {
@@ -422,11 +717,14 @@ impl PinacotecaApp {
             return;
         }
 
-        if self.entries.is_empty() {
+        if self.visible.is_empty() {
             return;
         }
+        if let Some(rating) = rating {
+            self.rate_selected(rating);
+        }
         let columns = columns_for(ctx.content_rect().width(), CELL, GAP);
-        let last = self.entries.len() - 1;
+        let last = self.visible.len() - 1;
         let mut selected = self.selected;
 
         if left {
@@ -481,7 +779,7 @@ impl eframe::App for PinacotecaApp {
                 if ui.button("◀").clicked() && self.selected > 0 {
                     self.selected -= 1;
                 }
-                if ui.button("▶").clicked() && self.selected + 1 < self.entries.len() {
+                if ui.button("▶").clicked() && self.selected + 1 < self.visible.len() {
                     self.selected += 1;
                 }
             });
@@ -490,11 +788,13 @@ impl eframe::App for PinacotecaApp {
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let selected = self
-                    .entries
+                    .visible
                     .get(self.selected)
                     .map(|entry| entry.name.as_str())
                     .unwrap_or("—");
                 ui.label(format!("{}   |   {selected}", self.status));
+                ui.separator();
+                ui.label("0-5 stars   Enter open   Esc close");
                 if self.viewer.is_some() {
                     ui.separator();
                     ui.label("zoom  +/-   1:1  Space/Esc");
@@ -505,6 +805,7 @@ impl eframe::App for PinacotecaApp {
         if self.viewer.is_some() {
             self.viewer_ui(ctx);
         } else {
+            self.sidebar_ui(ctx);
             egui::CentralPanel::default().show(ctx, |ui| {
                 self.grid_ui(ui);
             });
@@ -571,5 +872,50 @@ mod tests {
             size: ThumbSize::Preview,
         };
         assert_ne!(texture_name(&normal), texture_name(&preview));
+    }
+
+    /// An album must reuse the scanner's thumbnail key, otherwise one photo on
+    /// disk would be decoded twice and cached twice.
+    #[test]
+    fn album_entries_share_the_scanner_thumbnail_key() {
+        let dir = std::env::temp_dir().join(format!("pinacoteca-key-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("photo.jpg");
+        std::fs::write(&path, b"not really a jpeg").expect("fixture");
+
+        let metadata = std::fs::metadata(&path).expect("metadata");
+        let modified = metadata
+            .modified()
+            .expect("mtime")
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("epoch");
+        let scanned = DiscoveredPhoto {
+            path: path.clone(),
+            len: metadata.len(),
+            modified_secs: modified.as_secs() as i64,
+            modified_nanos: modified.subsec_nanos(),
+        };
+
+        let row = PhotoRow {
+            id: 1,
+            path: path.to_string_lossy().into_owned(),
+            folder_id: None,
+            file_size: Some(scanned.len as i64),
+            modified_secs: Some(scanned.modified_secs),
+            width: None,
+            height: None,
+            orientation: 1,
+            date_taken: None,
+            format: Some("jpg".into()),
+            caption: None,
+            hidden: false,
+            rating: 3,
+        };
+
+        let entry = entry_for(&row).expect("entry");
+        assert_eq!(entry.key, key_for(&scanned, ThumbSize::Normal));
+        assert_eq!(entry.rating, 3);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -140,6 +140,25 @@ impl Database {
     }
 
     /// Number of photos in the catalog.
+    /// Every stored rating, keyed by photo path.
+    ///
+    /// Used once after a scan to paint the stars on the grid without a query
+    /// per cell.
+    pub fn ratings_by_path(&self) -> Result<std::collections::HashMap<String, u8>, DbError> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT path, rating FROM photos WHERE rating > 0")?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, u8>(1)?))
+        })?;
+        let mut ratings = std::collections::HashMap::new();
+        for row in rows {
+            let (path, rating) = row?;
+            ratings.insert(path, rating);
+        }
+        Ok(ratings)
+    }
+
     pub fn count_photos(&self) -> Result<i64, DbError> {
         Ok(self
             .connection()
