@@ -1,12 +1,20 @@
 //! Pluggable image decoding for Pinacoteca.
 //!
 //! Decoding sits behind the [`Decoder`] trait so implementations can be swapped
-//! or added without touching the rest of the application. Concrete decoders
-//! (pure-Rust, and optional RAW / HEIC packs) are selected in milestone M2 based
-//! on benchmarks; this crate currently defines only the interface and the
-//! registry that resolves a decoder for a given file.
+//! or added without touching the rest of the application. The default set is
+//! pure Rust — JPEG ([`jpeg::JpegDecoder`], `zune-jpeg`) and PNG
+//! ([`png::PngDecoder`]) — per [ADR-0001](../../../docs/adr/0001-decoder-strategy.md).
+//! [`exif`] adds EXIF orientation. [`default_registry`] builds the standard set.
+
+pub mod exif;
+pub mod jpeg;
+pub mod png;
 
 use std::path::Path;
+
+pub use exif::Orientation;
+pub use jpeg::JpegDecoder;
+pub use png::PngDecoder;
 
 /// Pixel dimensions of an image.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,6 +136,17 @@ impl DecoderRegistry {
     }
 }
 
+/// Builds the standard decoder registry: JPEG then PNG.
+///
+/// Order matters only if two decoders claim the same file; here the extensions
+/// are disjoint.
+pub fn default_registry() -> DecoderRegistry {
+    let mut registry = DecoderRegistry::new();
+    registry.register(Box::new(JpegDecoder::new()));
+    registry.register(Box::new(PngDecoder::new()));
+    registry
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +190,44 @@ mod tests {
     fn rgba_image_checks_buffer_length() {
         assert!(RgbaImage::new(2, 2, vec![0; 16]).is_some());
         assert!(RgbaImage::new(2, 2, vec![0; 15]).is_none());
+    }
+
+    #[test]
+    fn default_registry_resolves_jpeg_and_png() {
+        let registry = default_registry();
+        assert_eq!(registry.len(), 2);
+        assert_eq!(
+            registry.decoder_for(Path::new("a.JPG")).map(Decoder::name),
+            Some("jpeg")
+        );
+        assert_eq!(
+            registry.decoder_for(Path::new("a.jpeg")).map(Decoder::name),
+            Some("jpeg")
+        );
+        assert_eq!(
+            registry.decoder_for(Path::new("a.png")).map(Decoder::name),
+            Some("png")
+        );
+        assert!(registry.decoder_for(Path::new("a.gif")).is_none());
+    }
+
+    #[test]
+    fn orientation_maps_exif_values_and_dimensions() {
+        assert_eq!(Orientation::from_exif(1), Orientation::Upright);
+        assert_eq!(Orientation::from_exif(6), Orientation::Rotate90Cw);
+        assert_eq!(Orientation::from_exif(99), Orientation::Upright);
+        assert_eq!(
+            Orientation::Rotate90Cw.oriented_dimensions(4000, 3000),
+            (3000, 4000)
+        );
+        assert_eq!(
+            Orientation::Upright.oriented_dimensions(4000, 3000),
+            (4000, 3000)
+        );
+        assert_eq!(
+            Orientation::Rotate180.oriented_dimensions(4000, 3000),
+            (4000, 3000)
+        );
+        assert!(Orientation::Transpose.swaps_dimensions());
     }
 }

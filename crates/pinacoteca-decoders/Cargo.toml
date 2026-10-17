@@ -10,3 +10,6 @@ homepage.workspace = true
 description = "Pluggable image decoder layer for Pinacoteca."
 
 [dependencies]
+zune-jpeg = "0.5.15"
+png = "0.18.1"
+kamadak-exif = "0.6.1"
