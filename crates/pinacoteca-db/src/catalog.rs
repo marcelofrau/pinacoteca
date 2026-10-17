@@ -58,6 +58,22 @@ impl PhotoRow {
     }
 }
 
+/// A photo to insert or refresh while scanning.
+///
+/// Deliberately narrower than [`PhotoRow`]: a scan records only file facts, and
+/// user state (rating, caption, hidden, edits) is never touched.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewPhoto {
+    /// Absolute path; the key the catalog is looked up by.
+    pub path: String,
+    /// File size in bytes.
+    pub len: i64,
+    /// Modification time, seconds since the Unix epoch.
+    pub modified_secs: i64,
+    /// Lowercase file extension, if any.
+    pub format: Option<String>,
+}
+
 impl Database {
     /// Inserts a folder if needed and returns its id.
     pub fn upsert_folder(&self, path: &str) -> Result<i64, DbError> {
@@ -101,6 +117,45 @@ impl Database {
             |row| row.get(0),
         )?;
         Ok(id)
+    }
+
+    /// Inserts or refreshes many photos in one transaction.
+    ///
+    /// A scan inserts tens of thousands of rows. One statement per row, each in
+    /// its own implicit transaction, fsyncs once per row — that is what froze
+    /// the window while a large folder opened. This prepares the statement once
+    /// and commits the whole batch together.
+    pub fn upsert_photos(
+        &self,
+        folder_id: Option<i64>,
+        photos: &[NewPhoto],
+    ) -> Result<(), DbError> {
+        if photos.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection().unchecked_transaction()?;
+        {
+            let mut statement = transaction.prepare(
+                "INSERT INTO photos (path, folder_id, file_size, modified_secs, format)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (path) DO UPDATE SET
+                     folder_id = excluded.folder_id,
+                     file_size = excluded.file_size,
+                     modified_secs = excluded.modified_secs,
+                     format = excluded.format",
+            )?;
+            for photo in photos {
+                statement.execute(rusqlite::params![
+                    photo.path,
+                    folder_id,
+                    photo.len,
+                    photo.modified_secs,
+                    photo.format,
+                ])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
     }
 
     /// Records decoded image information for a photo.
@@ -243,6 +298,47 @@ mod tests {
         assert_eq!(photo.modified_secs, Some(2000));
         assert_eq!(photo.rating, 5, "rating must survive a re-scan");
         assert_eq!(photo.caption.as_deref(), Some("sunset"));
+    }
+
+    #[test]
+    fn batch_upsert_writes_many_rows_and_preserves_user_state() {
+        let db = Database::open_in_memory().unwrap();
+        let folder = db.upsert_folder("photos").unwrap();
+
+        let photos: Vec<NewPhoto> = (0..500)
+            .map(|index| NewPhoto {
+                path: format!("photos/{index}.jpg"),
+                len: index as i64,
+                modified_secs: 1000 + index as i64,
+                format: Some("jpg".to_string()),
+            })
+            .collect();
+        db.upsert_photos(Some(folder), &photos).unwrap();
+        assert_eq!(db.count_photos().unwrap(), 500);
+
+        db.set_photo_rating("photos/7.jpg", 4).unwrap();
+
+        // Re-running the batch refreshes facts but keeps the rating.
+        let refreshed: Vec<NewPhoto> = photos
+            .iter()
+            .map(|photo| NewPhoto {
+                len: photo.len + 1,
+                ..photo.clone()
+            })
+            .collect();
+        db.upsert_photos(Some(folder), &refreshed).unwrap();
+
+        assert_eq!(db.count_photos().unwrap(), 500, "no duplicates");
+        let photo = db.photo_by_path("photos/7.jpg").unwrap().unwrap();
+        assert_eq!(photo.file_size, Some(8));
+        assert_eq!(photo.rating, 4);
+    }
+
+    #[test]
+    fn batch_upsert_of_nothing_is_a_no_op() {
+        let db = Database::open_in_memory().unwrap();
+        db.upsert_photos(None, &[]).unwrap();
+        assert_eq!(db.count_photos().unwrap(), 0);
     }
 
     #[test]

@@ -64,8 +64,16 @@ pub struct Database {
 
 impl Database {
     /// Opens (creating if needed) a database at `path` and applies migrations.
+    ///
+    /// File-backed databases run in WAL mode with `synchronous = NORMAL`: the
+    /// scanner writes in a worker thread while the window reads and writes
+    /// ratings, so the two connections must coexist, and a scan inserts tens of
+    /// thousands of rows.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, DbError> {
         let conn = rusqlite::Connection::open(path)?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "busy_timeout", 5000)?;
         Self::from_connection(conn)
     }
 

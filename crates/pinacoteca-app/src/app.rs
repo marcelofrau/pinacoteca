@@ -21,6 +21,9 @@ const GAP: f32 = 8.0;
 /// Maximum thumbnail requests queued per frame.
 const REQUESTS_PER_FRAME: usize = 64;
 
+/// Scan messages appended to the grid per frame, so a huge folder streams in.
+const MESSAGES_PER_FRAME: usize = 4000;
+
 /// One photo in the grid.
 #[derive(Clone)]
 struct Entry {
@@ -139,10 +142,15 @@ fn data_dir() -> PathBuf {
     std::env::temp_dir().join("Pinacoteca")
 }
 
+/// The catalog file, shared by the window and the scanner's own connection.
+fn db_path() -> PathBuf {
+    data_dir().join("pinacoteca.db")
+}
+
 fn open_database() -> Result<Database, pinacoteca_db::DbError> {
     let dir = data_dir();
     std::fs::create_dir_all(&dir).map_err(|e| pinacoteca_db::DbError::Migration(e.to_string()))?;
-    Database::open(dir.join("pinacoteca.db"))
+    Database::open(db_path())
 }
 
 /// Builds a thumbnail key for a discovered photo.
@@ -214,7 +222,6 @@ impl PinacotecaApp {
         }
     }
 
-    /// Rebuilds the photo list the grid shows from the current [`View`].
     fn rebuild_visible(&mut self) {
         self.selected = 0;
         match &self.view {
@@ -244,55 +251,6 @@ impl PinacotecaApp {
                     .collect();
             }
         }
-    }
-
-    /// Imports stars, captions and keywords from each folder's `.picasa.ini`.
-    ///
-    /// Read-only: the INI is never rewritten, so a library that is still
-    /// managed by Picasa keeps working and unknown keys survive untouched.
-    /// Album membership is deliberately not imported — Picasa stores opaque
-    /// tokens there and resolves the names in its own obfuscated database.
-    fn import_picasa_ini(&mut self) {
-        let mut folders: Vec<PathBuf> = self
-            .entries
-            .iter()
-            .filter_map(|entry| entry.path.parent().map(Path::to_path_buf))
-            .collect();
-        folders.sort();
-        folders.dedup();
-
-        let mut imported = 0usize;
-        for folder in folders {
-            let ini = match pinacoteca_core::picasa_ini::read(&folder.join(".picasa.ini")) {
-                Ok(Some(ini)) => ini,
-                _ => match pinacoteca_core::picasa_ini::read(&folder.join("Picasa.ini")) {
-                    Ok(Some(ini)) => ini,
-                    _ => continue,
-                },
-            };
-
-            for photo in &ini.photos {
-                let Some(db) = &self.db else { break };
-                let path = folder.join(&photo.file).to_string_lossy().into_owned();
-                if let Some(star) = photo.star {
-                    let _ = db.set_photo_rating(&path, star);
-                }
-                if let Some(caption) = &photo.caption {
-                    let _ = db.set_photo_caption(&path, caption);
-                }
-                for keyword in &photo.keywords {
-                    if let Ok(tag_id) = db.ensure_tag(keyword) {
-                        let _ = db.tag_photo(&path, tag_id);
-                    }
-                }
-                imported += 1;
-            }
-        }
-
-        if imported > 0 {
-            self.status = format!("Imported metadata from .picasa.ini for {imported} photo(s)");
-        }
-        self.apply_stored_ratings();
     }
 
     /// Paints the stored ratings onto the scanned entries.
@@ -385,7 +343,7 @@ impl PinacotecaApp {
                 self.status = "Album details saved".into();
             }
             Some(Err(error)) => self.status = format!("album: {error}"),
-            None => {}
+            _ => {}
         }
     }
 
@@ -530,7 +488,7 @@ impl PinacotecaApp {
                     }
                 }
                 Some(Err(error)) => self.status = format!("album: {error}"),
-                None => {}
+                _ => {}
             }
         }
         if released {
@@ -546,7 +504,7 @@ impl PinacotecaApp {
                         self.status = format!("album '{name}' created");
                     }
                     Some(Err(error)) => self.status = format!("album: {error}"),
-                    None => {}
+                    _ => {}
                 }
             }
         }
@@ -567,7 +525,7 @@ impl PinacotecaApp {
                     }
                 }
                 Some(Err(error)) => self.status = format!("album: {error}"),
-                None => {}
+                _ => {}
             }
         }
         if let Some(album_id) = delete {
@@ -611,7 +569,7 @@ impl PinacotecaApp {
         self.selected = 0;
         self.viewer = None;
         self.ensure_pool();
-        self.scan = Some(ScanHandle::start(root, self.scan_generation));
+        self.scan = Some(ScanHandle::start(root, self.scan_generation, db_path()));
         self.status = "Scanning…".into();
     }
 
@@ -630,23 +588,16 @@ impl PinacotecaApp {
         if let Some(scan) = &self.scan {
             let generation = scan.generation();
             let mut finished = false;
-            for message in scan.drain() {
+            // Take a bounded slice per frame. A large folder sends tens of
+            // thousands of messages; the catalog writes and the `.picasa.ini`
+            // import now happen on the scan thread, so a frame only has to
+            // append the entries it can show.
+            for message in scan.drain_up_to(MESSAGES_PER_FRAME) {
                 if generation != self.scan_generation {
                     break;
                 }
                 match message {
                     ScanMessage::Photo(photo) => {
-                        if let Some(db) = &self.db {
-                            let root = self.scan_root.to_string_lossy().into_owned();
-                            let folder = db.upsert_folder(&root).ok();
-                            let _ = db.upsert_photo_facts(
-                                &photo.path.to_string_lossy(),
-                                folder,
-                                photo.len as i64,
-                                photo.modified_secs,
-                                photo.path.extension().and_then(|e| e.to_str()),
-                            );
-                        }
                         self.entries.push(Entry {
                             name: file_name(&photo.path),
                             path: photo.path.clone(),
@@ -662,7 +613,7 @@ impl PinacotecaApp {
             }
             if finished {
                 self.scan = None;
-                self.import_picasa_ini();
+                self.apply_stored_ratings();
                 self.view = View::All;
                 self.rebuild_visible();
             }
@@ -728,15 +679,20 @@ impl PinacotecaApp {
 
         let columns = columns_for(ui.available_width(), CELL, GAP);
         let count = self.visible.len();
+        let rows = count.div_ceil(columns);
+        let row_height = CELL + GAP;
         let mut cells: Vec<(usize, egui::Rect, egui::Response)> = Vec::new();
 
+        // `show_rows` hands back only the rows on screen. Laying out every cell
+        // (a whole 20k-photo library) each frame is what made the window crawl;
+        // the cost is now proportional to the viewport, not the library.
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
-            .show(ui, |ui| {
-                let mut index = 0;
-                while index < count {
+            .show_rows(ui, row_height, rows, |ui, row_range| {
+                for row in row_range {
                     ui.horizontal(|ui| {
-                        for _ in 0..columns {
+                        for column in 0..columns {
+                            let index = row * columns + column;
                             if index >= count {
                                 break;
                             }
@@ -745,7 +701,6 @@ impl PinacotecaApp {
                                 egui::Sense::click_and_drag(),
                             );
                             cells.push((index, rect, response));
-                            index += 1;
                         }
                     });
                 }
@@ -1400,17 +1355,30 @@ mod tests {
             }],
             ..PinacotecaApp::default()
         };
-        app.import_picasa_ini();
 
-        let db = app.db.as_ref().expect("db");
-        let stored = db
+        // The import runs on the scan thread in production; here it is called
+        // directly against the same database.
+        let applied = crate::workers::import_folder_ini(
+            app.db.as_ref().expect("db"),
+            photo.parent().expect("parent"),
+        );
+        assert_eq!(applied, 1);
+        app.apply_stored_ratings();
+
+        let stored = app
+            .db
+            .as_ref()
+            .expect("db")
             .photo_by_path(&photo.to_string_lossy())
             .expect("row")
             .expect("photo");
-        assert_eq!(stored.rating, 4);
+        assert_eq!(stored.rating, 4, "the star comes from `.picasa.ini`");
         assert_eq!(app.entries[0].rating, 4);
 
-        let mut names: Vec<String> = db
+        let mut names: Vec<String> = app
+            .db
+            .as_ref()
+            .expect("db")
             .list_tags()
             .expect("tags")
             .into_iter()

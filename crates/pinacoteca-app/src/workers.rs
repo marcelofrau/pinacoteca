@@ -5,14 +5,23 @@
 //! token: results carrying a stale token are discarded on arrival.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use pinacoteca_core::scan::{DiscoveredPhoto, scan_folder};
+use pinacoteca_db::Database;
+use pinacoteca_db::catalog::NewPhoto;
 use pinacoteca_decoders::{Orientation, default_registry};
 use pinacoteca_render::thumbs::{GeneratedThumb, ThumbCache, ThumbError, ThumbKey, generate};
+
+/// How many photos are written per transaction while scanning.
+///
+/// One statement per row, each in its own implicit transaction, fsyncs once per
+/// row. On a large folder that alone froze the window for the whole scan; a
+/// batch keeps the write cost proportional to the folder.
+const DB_BATCH: usize = 1000;
 
 /// Messages from a folder scan.
 #[derive(Debug)]
@@ -36,26 +45,66 @@ pub struct ScanHandle {
 
 impl ScanHandle {
     /// Starts scanning `root` on a background thread.
-    pub fn start(root: PathBuf, generation: u64) -> Self {
+    ///
+    /// The catalog writes happen here, not on the UI thread: a large folder is
+    /// tens of thousands of rows, and doing that behind the frame is what
+    /// stalled the window. Each folder's `.picasa.ini` is imported in the same
+    /// pass, also off the UI thread.
+    pub fn start(root: PathBuf, generation: u64, db_path: PathBuf) -> Self {
         let (sender, receiver) = channel();
         thread::spawn(move || {
-            let mut send = |photo: DiscoveredPhoto| {
-                let _ = sender.send(ScanMessage::Photo(photo));
+            let database = Database::open(&db_path).ok();
+            let folder_id = database
+                .as_ref()
+                .and_then(|db| db.upsert_folder(&root.to_string_lossy()).ok());
+
+            let mut batch: Vec<NewPhoto> = Vec::with_capacity(DB_BATCH);
+            let mut folders: HashSet<PathBuf> = HashSet::new();
+
+            let outcome = {
+                let mut collect = |photo: DiscoveredPhoto| {
+                    if let Some(parent) = photo.path.parent() {
+                        folders.insert(parent.to_path_buf());
+                    }
+                    batch.push(NewPhoto {
+                        path: photo.path.to_string_lossy().into_owned(),
+                        len: photo.len as i64,
+                        modified_secs: photo.modified_secs,
+                        format: photo
+                            .path
+                            .extension()
+                            .and_then(|extension| extension.to_str())
+                            .map(str::to_ascii_lowercase),
+                    });
+                    if batch.len() >= DB_BATCH {
+                        if let Some(db) = &database {
+                            let _ = db.upsert_photos(folder_id, &batch);
+                        }
+                        batch.clear();
+                    }
+                    let _ = sender.send(ScanMessage::Photo(photo));
+                };
+                scan_folder(&root, &mut collect)
             };
-            match scan_folder(&root, &mut send) {
-                Ok(stats) => {
-                    let _ = sender.send(ScanMessage::Done {
-                        photos: stats.photos,
-                        errors: stats.errors,
-                    });
-                }
-                Err(_) => {
-                    let _ = sender.send(ScanMessage::Done {
-                        photos: 0,
-                        errors: 1,
-                    });
+
+            if let Some(db) = &database {
+                let _ = db.upsert_photos(folder_id, &batch);
+                for folder in &folders {
+                    import_folder_ini(db, folder);
                 }
             }
+
+            let done = match outcome {
+                Ok(stats) => ScanMessage::Done {
+                    photos: stats.photos,
+                    errors: stats.errors,
+                },
+                Err(_) => ScanMessage::Done {
+                    photos: 0,
+                    errors: 1,
+                },
+            };
+            let _ = sender.send(done);
         });
         Self {
             receiver,
@@ -68,9 +117,19 @@ impl ScanHandle {
         self.generation
     }
 
-    /// Non-blocking drain of pending messages.
-    pub fn drain(&self) -> Vec<ScanMessage> {
-        self.receiver.try_iter().collect()
+    /// Non-blocking drain of at most `limit` pending messages.
+    ///
+    /// The rest stay queued, so a very large folder streams in over several
+    /// frames instead of stalling one.
+    pub fn drain_up_to(&self, limit: usize) -> Vec<ScanMessage> {
+        let mut out = Vec::new();
+        while out.len() < limit {
+            match self.receiver.try_recv() {
+                Ok(message) => out.push(message),
+                Err(_) => break,
+            }
+        }
+        out
     }
 }
 
@@ -158,6 +217,35 @@ impl ThumbPool {
     }
 }
 
+/// Imports stars, captions and keywords from one folder's `.picasa.ini`.
+///
+/// The file is read-only — it is never rewritten — so a library that Picasa
+/// still manages keeps working. Returns how many photo sections were applied.
+pub(crate) fn import_folder_ini(db: &Database, folder: &Path) -> usize {
+    let mut applied = 0;
+    for name in [".picasa.ini", "Picasa.ini"] {
+        let Ok(Some(ini)) = pinacoteca_core::picasa_ini::read(&folder.join(name)) else {
+            continue;
+        };
+        for photo in &ini.photos {
+            let path = folder.join(&photo.file).to_string_lossy().into_owned();
+            if let Some(star) = photo.star {
+                let _ = db.set_photo_rating(&path, star);
+            }
+            if let Some(caption) = &photo.caption {
+                let _ = db.set_photo_caption(&path, caption);
+            }
+            for keyword in &photo.keywords {
+                if let Ok(tag) = db.ensure_tag(keyword) {
+                    let _ = db.tag_photo(&path, tag);
+                }
+            }
+            applied += 1;
+        }
+    }
+    applied
+}
+
 fn generate_for(
     registry: &pinacoteca_decoders::DecoderRegistry,
     cache: &ThumbCache,
@@ -190,13 +278,13 @@ mod tests {
         std::fs::write(root.join("a.jpg"), b"x").unwrap();
         std::fs::write(root.join("b.txt"), b"x").unwrap();
 
-        let handle = ScanHandle::start(root.clone(), 7);
+        let handle = ScanHandle::start(root.clone(), 7, root.join("catalog.db"));
         assert_eq!(handle.generation(), 7);
 
         let mut photos = 0;
         let mut done = false;
         for _ in 0..200 {
-            for message in handle.drain() {
+            for message in handle.drain_up_to(usize::MAX) {
                 match message {
                     ScanMessage::Photo(_) => photos += 1,
                     ScanMessage::Done { .. } => done = true,
@@ -281,11 +369,11 @@ mod tests {
         std::fs::write(dir.join("c.png"), make_png(16, 16)).unwrap();
 
         // 1. Scan.
-        let handle = ScanHandle::start(dir.clone(), 1);
+        let handle = ScanHandle::start(dir.clone(), 1, dir.join("catalog.db"));
         let mut photos = Vec::new();
         let mut done = false;
         for _ in 0..300 {
-            for message in handle.drain() {
+            for message in handle.drain_up_to(usize::MAX) {
                 match message {
                     ScanMessage::Photo(photo) => photos.push(photo),
                     ScanMessage::Done { .. } => done = true,
