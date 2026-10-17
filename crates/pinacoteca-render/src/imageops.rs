@@ -32,10 +32,10 @@ fn box_resample(image: &RgbaImage, width: u32, height: u32) -> RgbaImage {
 
     for dy in 0..dst_h {
         let y0 = dy * src_h / dst_h;
-        let y1 = (((dy + 1) * src_h + dst_h - 1) / dst_h).max(y0 + 1).min(src_h);
+        let y1 = ((dy + 1) * src_h).div_ceil(dst_h).min(src_h);
         for dx in 0..dst_w {
             let x0 = dx * src_w / dst_w;
-            let x1 = (((dx + 1) * src_w + dst_w - 1) / dst_w).max(x0 + 1).min(src_w);
+            let x1 = ((dx + 1) * src_w).div_ceil(dst_w).min(src_w);
 
             let mut sums = [0u64; 4];
             let mut count = 0u64;
