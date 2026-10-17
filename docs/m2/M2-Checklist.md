@@ -16,13 +16,14 @@ performance budgets recorded in `docs/architecture.md`.
 - [x] **GPU rendering pipeline prototype**: mip/pyramid strategy for instant zoom
       — `pinacoteca-render` (pyramid + level selection, 6 tests) +
       `docs/m2/pyramid-benchmark.md`; ADR-0002
-- [ ] **Thumbnail cache design + background worker prototype** — ADR-0003
-- [ ] **Database schema v1** (catalog, albums, tags, ratings, edit stacks)
-      — migration + ADR-0004
-- [ ] **Concurrency model** (UI thread, scan, decode pool) — ADR-0005
+- [x] **Thumbnail cache design + background worker prototype** — `pinacoteca-render::thumbs`
+      (9 tests) + ADR-0003
+- [x] **Database schema v1** (catalog, albums, tags, ratings, edit stacks)
+      — migration `0002` + serde edit ops + ADR-0004
+- [x] **Concurrency model** (UI thread, scan, decode pool) — ADR-0005
 
 ## Closeout
 
-- [ ] Record performance budgets in `docs/architecture.md`
-- [ ] Update `docs/architecture.md` status (spike items settled)
-- [ ] M2 completeness review + verdict
+- [x] Record performance budgets in `docs/architecture.md`
+- [x] Update `docs/architecture.md` status (spike items settled)
+- [x] M2 completeness review + verdict — `docs/m2/M2-Completeness.md`

@@ -40,10 +40,13 @@ impl From<rusqlite::Error> for DbError {
 }
 
 /// The highest schema version this build understands.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Ordered schema migrations. Each entry moves the schema to version `index + 1`.
-const MIGRATIONS: &[&str] = &[include_str!("migrations/0001_initial.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("migrations/0001_initial.sql"),
+    include_str!("migrations/0002_catalog_metadata.sql"),
+];
 
 /// An open connection to a Pinacoteca database.
 pub struct Database {
@@ -127,12 +130,93 @@ mod tests {
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
                  WHERE type = 'table' AND name IN
-                 ('photos', 'albums', 'album_photos', 'tags', 'photo_tags', 'edit_ops')",
+                 ('photos', 'albums', 'album_photos', 'tags', 'photo_tags',
+                  'edit_ops', 'folders')",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(count, 6);
+        assert_eq!(count, 7);
+    }
+
+    #[test]
+    fn photos_carry_catalog_metadata() {
+        let db = Database::open_in_memory().unwrap();
+        let conn = db.connection();
+        conn.execute("INSERT INTO folders (path) VALUES ('photos/trip')", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO photos
+             (path, rating, folder_id, file_size, modified_secs, width, height,
+              orientation, date_taken, format, caption, hidden)
+             VALUES ('photos/trip/a.jpg', 4, 1, 123456, 1700000000, 3624, 2910,
+                     6, 1699999000, 'jpg', 'a caption', 0)",
+            [],
+        )
+        .unwrap();
+
+        let (rating, width, height, orientation, format, caption): (
+            u8,
+            u32,
+            u32,
+            u8,
+            String,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT rating, width, height, orientation, format, caption
+                 FROM photos WHERE path = 'photos/trip/a.jpg'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)? as u8,
+                        row.get::<_, i64>(1)? as u32,
+                        row.get::<_, i64>(2)? as u32,
+                        row.get::<_, i64>(3)? as u8,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                    ))
+                },
+            )
+            .unwrap();
+
+        assert_eq!(rating, 4);
+        assert_eq!((width, height), (3624, 2910));
+        assert_eq!(orientation, 6);
+        assert_eq!(format, "jpg");
+        assert_eq!(caption, "a caption");
+    }
+
+    #[test]
+    fn albums_carry_detail_fields() {
+        let db = Database::open_in_memory().unwrap();
+        let conn = db.connection();
+        conn.execute(
+            "INSERT INTO albums (name, kind, param, description, place_taken,
+                                 music_path, date)
+             VALUES ('Trip', 'manual', NULL, 'desc', 'Lisbon', 'music.mp3', 1700000000)",
+            [],
+        )
+        .unwrap();
+
+        let (description, place, music): (String, String, String) = conn
+            .query_row(
+                "SELECT description, place_taken, music_path FROM albums",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (description.as_str(), place.as_str(), music.as_str()),
+            ("desc", "Lisbon", "music.mp3")
+        );
+    }
+
+    #[test]
+    fn schema_version_tracks_migrations() {
+        let db = Database::open_in_memory().unwrap();
+        assert_eq!(db.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(SCHEMA_VERSION, 2);
     }
 
     #[test]

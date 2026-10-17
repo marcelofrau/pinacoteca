@@ -5,8 +5,10 @@
 //! produced by applying the stack at render time. Undo is removing the last
 //! operation; the originals on disk are byte-identical before and after editing.
 
+use serde::{Deserialize, Serialize};
+
 /// Rotation in 90-degree increments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Rotation {
     /// 90 degrees clockwise.
     Cw90,
@@ -20,7 +22,7 @@ pub enum Rotation {
 pub type Rect = (u32, u32, u32, u32);
 
 /// A simple visual effect preset.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Effect {
     /// Desaturate completely.
     Grayscale,
@@ -32,7 +34,7 @@ pub enum Effect {
 ///
 /// Adjustment values are relative integers centered on zero; the concrete range
 /// and mapping to pixels are fixed when rendering is implemented.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EditOp {
     /// Rotate the image.
     Rotate(Rotation),
@@ -126,5 +128,25 @@ mod tests {
                 EditOp::Effect(Effect::Grayscale)
             ]
         );
+    }
+
+    #[test]
+    fn edit_ops_serialize_to_json_and_back() {
+        // edit_ops rows store one EditOp per row as JSON in `payload`.
+        let op = EditOp::Rotate(Rotation::Cw270);
+        let json = serde_json::to_string(&op).unwrap();
+        assert_eq!(serde_json::from_str::<EditOp>(&json).unwrap(), op);
+
+        let op = EditOp::Straighten(-312);
+        let json = serde_json::to_string(&op).unwrap();
+        assert_eq!(serde_json::from_str::<EditOp>(&json).unwrap(), op);
+
+        let op = EditOp::Crop((10, 20, 30, 40));
+        let json = serde_json::to_string(&op).unwrap();
+        assert_eq!(serde_json::from_str::<EditOp>(&json).unwrap(), op);
+
+        let op = EditOp::Sharpen(8);
+        let json = serde_json::to_string(&op).unwrap();
+        assert_eq!(serde_json::from_str::<EditOp>(&json).unwrap(), op);
     }
 }

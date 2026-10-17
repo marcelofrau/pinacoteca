@@ -11,5 +11,7 @@
 //! level arithmetic can be unit-tested headlessly.
 
 pub mod pyramid;
+pub mod thumbs;
 
 pub use pyramid::Pyramid;
+pub use thumbs::{RequestQueue, ThumbCache, ThumbKey, ThumbSize};

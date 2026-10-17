@@ -44,3 +44,17 @@ Status: decoder strategy decided and recorded.
 - Evidence: `docs/m2/pyramid-benchmark.md`. Decision: `docs/adr/0002-gpu-zoom-render-pipeline.md`.
 
 Status: zoom/render strategy decided and recorded.
+
+## Step 3 — thumbnail cache + DB schema + concurrency (done)
+- `pinacoteca-render::thumbs`: `ThumbSize` classes (128/256/512/1600), content-keyed `ThumbKey` (path + size/mtime fingerprint), stable FNV-1a file names, `ThumbCache` (write/read/contains), and a deduplicating priority `RequestQueue` (`pop`, `forget_missing`). 9 tests.
+- `pinacoteca-db`: migration `0002_catalog_metadata.sql` (folders table; photo size/mtime/dimensions/orientation/date_taken/format/caption/hidden; album description/place/music/date); `SCHEMA_VERSION = 2`; +3 tests (6 total).
+- `pinacoteca-core`: serde derives on `Rotation`/`Effect`/`EditOp` + JSON roundtrip test (9 total) — makes `edit_ops.payload` real.
+- ADR-0003 (thumbnail cache), ADR-0004 (schema v1), ADR-0005 (concurrency: OS threads + channels, generation-token cancellation, bounded backpressure).
+
+## Step 4 — closeout (done)
+- `docs/architecture.md` updated: status finalized, diagram + crate table (+`pinacoteca-render`, +`pinacoteca-bench`), measured unit costs, performance budgets, ADR index.
+- `docs/m2/M2-Completeness.md` written (deliverables vs roadmap, residual items, verdict).
+
+**M2 COMPLETE.** Next: M3 viewer MVP — awaiting go-ahead.
+
+Status: all M2 deliverables closed.
