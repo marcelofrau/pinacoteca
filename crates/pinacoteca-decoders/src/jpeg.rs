@@ -60,38 +60,67 @@ impl Decoder for JpegDecoder {
         let width = info.width as u32;
         let height = info.height as u32;
 
-        // zune-jpeg returns RGB (some streams may return grayscale/CMYK-expanded
-        // RGB); promote to RGBA.
-        let pixel_count = width as usize * height as usize;
-        let mut rgba = Vec::with_capacity(pixel_count * 4);
-        match rgb.len() {
-            n if n == pixel_count * 3 => {
-                for chunk in rgb.chunks_exact(3) {
-                    rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
-                }
-            }
-            n if n == pixel_count => {
-                for &value in &rgb {
-                    rgba.extend_from_slice(&[value, value, value, 255]);
-                }
-            }
-            n if n == pixel_count * 4 => {
-                return Ok(RgbaImage {
-                    width,
-                    height,
-                    pixels: rgb,
-                });
-            }
-            n => {
-                return Err(DecodeError::Malformed(format!(
-                    "unexpected buffer size {n} for {width}x{height}"
-                )));
+        to_rgba(rgb, width, height)
+    }
+}
+
+/// Promotes a decoded buffer (RGB, gray, or already RGBA) to RGBA.
+fn to_rgba(buffer: Vec<u8>, width: u32, height: u32) -> Result<RgbaImage, DecodeError> {
+    let pixel_count = width as usize * height as usize;
+    let mut rgba = Vec::with_capacity(pixel_count * 4);
+    match buffer.len() {
+        n if n == pixel_count * 3 => {
+            for chunk in buffer.chunks_exact(3) {
+                rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
             }
         }
-
-        RgbaImage::new(width, height, rgba)
-            .ok_or_else(|| DecodeError::Malformed("buffer does not match dimensions".into()))
+        n if n == pixel_count => {
+            for &value in &buffer {
+                rgba.extend_from_slice(&[value, value, value, 255]);
+            }
+        }
+        n if n == pixel_count * 4 => {
+            return Ok(RgbaImage {
+                width,
+                height,
+                pixels: buffer,
+            });
+        }
+        n => {
+            return Err(DecodeError::Malformed(format!(
+                "unexpected buffer size {n} for {width}x{height}"
+            )));
+        }
     }
+    RgbaImage::new(width, height, rgba)
+        .ok_or_else(|| DecodeError::Malformed("buffer does not match dimensions".into()))
+}
+
+/// Reads JPEG dimensions from data already in memory.
+pub fn dimensions_bytes(data: &[u8]) -> Result<Dimensions, DecodeError> {
+    let mut decoder = zune_jpeg::JpegDecoder::new(std::io::Cursor::new(data));
+    decoder
+        .decode_headers()
+        .map_err(|e| DecodeError::Malformed(format!("{e:?}")))?;
+    let info = decoder
+        .info()
+        .ok_or_else(|| DecodeError::Malformed("missing header info".into()))?;
+    Ok(Dimensions {
+        width: info.width as u32,
+        height: info.height as u32,
+    })
+}
+
+/// Decodes JPEG data already in memory (e.g. an embedded EXIF thumbnail).
+pub fn decode_bytes(data: &[u8]) -> Result<RgbaImage, DecodeError> {
+    let mut decoder = zune_jpeg::JpegDecoder::new(std::io::Cursor::new(data));
+    let buffer = decoder
+        .decode()
+        .map_err(|e| DecodeError::Malformed(format!("{e:?}")))?;
+    let info = decoder
+        .info()
+        .ok_or_else(|| DecodeError::Malformed("missing header info".into()))?;
+    to_rgba(buffer, info.width as u32, info.height as u32)
 }
 
 #[cfg(test)]

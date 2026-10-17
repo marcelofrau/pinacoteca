@@ -257,6 +257,117 @@ impl RequestQueue {
     }
 }
 
+/// JPEG quality used for generated thumbnails.
+pub const THUMB_JPEG_QUALITY: u8 = 82;
+
+/// A thumbnail that was produced and stored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneratedThumb {
+    /// The encoded JPEG bytes that were written to the cache.
+    pub bytes: Vec<u8>,
+    /// Stored width in pixels.
+    pub width: u32,
+    /// Stored height in pixels.
+    pub height: u32,
+}
+
+/// Errors from thumbnail generation.
+#[derive(Debug)]
+pub enum ThumbError {
+    /// The cache could not be read or written.
+    Io(std::io::Error),
+    /// The source image could not be decoded.
+    Decode(pinacoteca_decoders::DecodeError),
+    /// The thumbnail could not be encoded.
+    Encode(String),
+}
+
+impl std::fmt::Display for ThumbError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ThumbError::Io(e) => write!(f, "thumbnail cache I/O error: {e}"),
+            ThumbError::Decode(e) => write!(f, "thumbnail decode error: {e}"),
+            ThumbError::Encode(m) => write!(f, "thumbnail encode error: {m}"),
+        }
+    }
+}
+
+impl std::error::Error for ThumbError {}
+
+impl From<std::io::Error> for ThumbError {
+    fn from(value: std::io::Error) -> Self {
+        ThumbError::Io(value)
+    }
+}
+
+/// Produces and stores the thumbnail for `key`, returning what was written.
+///
+/// The cheap path is tried first: when the source is a JPEG carrying an embedded
+/// EXIF thumbnail that is already large enough for the requested size class, that
+/// thumbnail is used instead of decoding the full image (ADR-0003). Otherwise the
+/// full image is decoded, oriented and downscaled. Either way the result is
+/// EXIF-oriented so the grid shows upright thumbnails.
+pub fn generate(
+    cache: &ThumbCache,
+    key: &ThumbKey,
+    decoder: &dyn pinacoteca_decoders::Decoder,
+    orientation: pinacoteca_decoders::Orientation,
+) -> Result<GeneratedThumb, ThumbError> {
+    let target = key.size.pixels();
+
+    let image = match embedded_source_image(&key.source, decoder, target) {
+        Some(image) => image,
+        None => decoder.decode(&key.source).map_err(ThumbError::Decode)?,
+    };
+
+    let image = crate::imageops::apply_orientation(&image, orientation);
+    let image = crate::imageops::resize_to_fit(&image, target);
+    let bytes = encode_jpeg(&image, THUMB_JPEG_QUALITY)?;
+    cache.write(key, &bytes)?;
+
+    Ok(GeneratedThumb {
+        bytes,
+        width: image.width,
+        height: image.height,
+    })
+}
+
+/// Returns the source pixels to use, preferring an embedded EXIF thumbnail when
+/// it is present and at least `target` pixels on its longest side.
+fn embedded_source_image(
+    source: &Path,
+    decoder: &dyn pinacoteca_decoders::Decoder,
+    target: u32,
+) -> Option<pinacoteca_decoders::RgbaImage> {
+    // Only JPEGs carry an embedded JPEG thumbnail.
+    if decoder.name() != "jpeg" {
+        return None;
+    }
+    let bytes = pinacoteca_decoders::exif::embedded_thumbnail_file(source)
+        .ok()
+        .flatten()?;
+    let dimensions = pinacoteca_decoders::jpeg::dimensions_bytes(&bytes).ok()?;
+    if dimensions.width.max(dimensions.height) < target {
+        return None;
+    }
+    pinacoteca_decoders::jpeg::decode_bytes(&bytes).ok()
+}
+
+/// Encodes an RGBA image as a baseline JPEG.
+fn encode_jpeg(image: &pinacoteca_decoders::RgbaImage, quality: u8) -> Result<Vec<u8>, ThumbError> {
+    let mut out = Vec::new();
+    let encoder = jpeg_encoder::Encoder::new(&mut out, quality);
+    encoder
+        .encode(
+            &image.pixels,
+            image.width as u16,
+            image.height as u16,
+            jpeg_encoder::ColorType::Rgba,
+        )
+        .map_err(|e| ThumbError::Encode(e.to_string()))?;
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,5 +488,72 @@ mod tests {
         assert_eq!(fingerprint.len, 5);
         assert!(fingerprint.modified_secs > 0);
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn generate_downscales_orients_and_caches() {
+        // A 600x400 source, so resizing to Normal (256) is exercised.
+        let mut pixels = vec![0u8; 600 * 400 * 4];
+        for (index, pixel) in pixels.chunks_exact_mut(4).enumerate() {
+            pixel.copy_from_slice(&[(index % 251) as u8, 90, 30, 255]);
+        }
+        let source = pinacoteca_decoders::RgbaImage::new(600, 400, pixels).unwrap();
+        let encoded = encode_jpeg(&source, THUMB_JPEG_QUALITY).unwrap();
+
+        let dir = std::env::temp_dir().join(format!("pinacoteca-gen-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let source_path = dir.join("source.jpg");
+        fs::write(&source_path, &encoded).unwrap();
+
+        let cache = ThumbCache::new(dir.join("cache"));
+        let key = ThumbKey {
+            source: source_path.clone(),
+            fingerprint: SourceFingerprint::read(&source_path).unwrap(),
+            size: ThumbSize::Normal,
+        };
+
+        let decoder = pinacoteca_decoders::JpegDecoder::new();
+        let generated =
+            generate(&cache, &key, &decoder, pinacoteca_decoders::Orientation::Upright).unwrap();
+
+        assert!(cache.contains(&key));
+        assert_eq!((generated.width, generated.height), (256, 171));
+        assert_eq!(cache.read(&key).unwrap().unwrap(), generated.bytes);
+
+        // The stored bytes must be a decodable JPEG at the expected size.
+        let stored = pinacoteca_decoders::jpeg::dimensions_bytes(&generated.bytes).unwrap();
+        assert_eq!((stored.width, stored.height), (256, 171));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn generate_applies_exif_orientation() {
+        let mut pixels = vec![0u8; 40 * 20 * 4];
+        pixels.chunks_exact_mut(4).for_each(|p| p.copy_from_slice(&[10, 20, 30, 255]));
+        let source = pinacoteca_decoders::RgbaImage::new(40, 20, pixels).unwrap();
+        let encoded = encode_jpeg(&source, THUMB_JPEG_QUALITY).unwrap();
+
+        let dir = std::env::temp_dir().join(format!("pinacoteca-orient-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let source_path = dir.join("source.jpg");
+        fs::write(&source_path, &encoded).unwrap();
+
+        let cache = ThumbCache::new(dir.join("cache"));
+        let key = ThumbKey {
+            source: source_path.clone(),
+            fingerprint: SourceFingerprint::read(&source_path).unwrap(),
+            size: ThumbSize::Normal,
+        };
+
+        let decoder = pinacoteca_decoders::JpegDecoder::new();
+        // Orientation 6 rotates 90° CW, so 40x20 becomes 20x40.
+        let generated =
+            generate(&cache, &key, &decoder, pinacoteca_decoders::Orientation::Rotate90Cw).unwrap();
+        assert_eq!((generated.width, generated.height), (20, 40));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

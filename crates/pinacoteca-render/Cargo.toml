@@ -11,3 +11,4 @@ description = "Multi-resolution image preparation and GPU rendering pipeline for
 
 [dependencies]
 pinacoteca-decoders = { path = "../pinacoteca-decoders" }
+jpeg-encoder = "0.7.1"

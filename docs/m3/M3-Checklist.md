@@ -11,7 +11,7 @@ navigation.
 ## Foundation (from M2 decisions)
 
 - [x] Concrete `Decoder` implementations (`zune-jpeg`, `png`) + EXIF orientation
-- [ ] Thumbnail generation: EXIF-thumb-first, else decode + downscale (`ThumbSize`)
+- [x] Thumbnail generation: EXIF-thumb-first, else decode + downscale (`ThumbSize`)
 - [ ] Folder scan → catalog (incremental), persisted via `pinacoteca-db`
 
 ## UI

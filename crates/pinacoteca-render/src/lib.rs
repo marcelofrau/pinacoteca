@@ -10,6 +10,7 @@
 //! and graphics device); this crate stays free of any graphics dependency so the
 //! level arithmetic can be unit-tested headlessly.
 
+pub mod imageops;
 pub mod pyramid;
 pub mod thumbs;
 
