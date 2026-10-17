@@ -80,6 +80,8 @@ pub struct PinacotecaApp {
     new_album: String,
     /// Detail fields being edited for the selected album.
     album_edit: Option<AlbumEdit>,
+    /// Photo currently being dragged from the grid, if any.
+    dragging: Option<PathBuf>,
     /// Photos shown under the current [`View`].
     visible: Vec<Entry>,
 }
@@ -114,6 +116,7 @@ impl Default for PinacotecaApp {
             visible: Vec::new(),
             new_album: String::new(),
             album_edit: None,
+            dragging: None,
             status,
         }
     }
@@ -389,6 +392,8 @@ impl PinacotecaApp {
         let mut add_selected: Option<i64> = None;
         let mut delete: Option<i64> = None;
         let mut save = false;
+        let mut drop_on: Option<i64> = None;
+        let released = ctx.input(|i| i.pointer.any_released());
 
         egui::SidePanel::left("albums")
             .resizable(true)
@@ -447,10 +452,11 @@ impl PinacotecaApp {
                 for album in &self.albums {
                     ui.horizontal(|ui| {
                         let label = format!("{} ({})", album.name, album.photo_count);
-                        if ui
-                            .selectable_label(self.view == View::Album(album.id), label)
-                            .clicked()
-                        {
+                        let row = ui.selectable_label(self.view == View::Album(album.id), label);
+                        if self.dragging.is_some() && row.hovered() && released {
+                            drop_on = Some(album.id);
+                        }
+                        if row.clicked() {
                             pick = Some(View::Album(album.id));
                         }
                         if ui
@@ -506,6 +512,25 @@ impl PinacotecaApp {
         }
         if save {
             self.save_album_edit();
+        }
+        if let Some(album_id) = drop_on
+            && let Some(path) = self.dragging.clone()
+        {
+            let path = path.to_string_lossy().into_owned();
+            match self.db.as_ref().map(|db| db.add_photos(album_id, &[path])) {
+                Some(Ok(_)) => {
+                    self.status = "Added to album".into();
+                    self.refresh_albums();
+                    if self.view == View::Album(album_id) {
+                        self.rebuild_visible();
+                    }
+                }
+                Some(Err(error)) => self.status = format!("album: {error}"),
+                None => {}
+            }
+        }
+        if released {
+            self.dragging = None;
         }
         if create {
             let name = self.new_album.trim().to_string();
@@ -702,8 +727,10 @@ impl PinacotecaApp {
                             if index >= count {
                                 break;
                             }
-                            let (rect, response) = ui
-                                .allocate_exact_size(egui::vec2(CELL, CELL), egui::Sense::click());
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(CELL, CELL),
+                                egui::Sense::click_and_drag(),
+                            );
                             cells.push((index, rect, response));
                             index += 1;
                         }
@@ -715,6 +742,8 @@ impl PinacotecaApp {
         let mut budget = REQUESTS_PER_FRAME;
         let mut clicked = None;
         let mut opened = None;
+        let mut dragged = None;
+        let mut reorder_to = None;
 
         for (index, rect, response) in cells {
             let key = self.visible[index].key.clone();
@@ -762,6 +791,15 @@ impl PinacotecaApp {
             if response.double_clicked() {
                 opened = Some(index);
             }
+            if response.drag_started() {
+                dragged = Some(index);
+            }
+            if self.dragging.is_some()
+                && response.hovered()
+                && ctx.input(|i| i.pointer.any_released())
+            {
+                reorder_to = Some(index);
+            }
         }
 
         if let Some(index) = clicked {
@@ -771,6 +809,42 @@ impl PinacotecaApp {
             self.selected = index;
             self.open_viewer(index);
         }
+        if let Some(index) = dragged {
+            self.selected = index;
+            self.dragging = self.visible.get(index).map(|entry| entry.path.clone());
+        }
+        if let Some(target) = reorder_to {
+            self.reorder_album_to(target);
+        }
+    }
+
+    /// Moves the dragged photo to `target`'s slot inside the current album.
+    fn reorder_album_to(&mut self, target: usize) {
+        let View::Album(album_id) = self.view.clone() else {
+            return;
+        };
+        let Some(source) = self.dragging.clone() else {
+            return;
+        };
+        let mut order: Vec<String> = self
+            .visible
+            .iter()
+            .map(|entry| entry.path.to_string_lossy().into_owned())
+            .collect();
+        let Some(from) = order.iter().position(|path| Path::new(path) == source) else {
+            return;
+        };
+        let moved = order.remove(from);
+        order.insert(target.min(order.len()), moved);
+        if let Some(db) = &self.db
+            && let Err(error) = db.reorder(album_id, &order)
+        {
+            self.status = format!("album: {error}");
+            return;
+        }
+        self.status = "Album reordered".into();
+        self.dragging = None;
+        self.rebuild_visible();
     }
 
     /// Opens the full-resolution viewer for a grid index.
@@ -986,7 +1060,7 @@ impl eframe::App for PinacotecaApp {
                     .unwrap_or("—");
                 ui.label(format!("{}   |   {selected}", self.status));
                 ui.separator();
-                ui.label("0-5 stars   Enter open   Esc close   Del remove from album");
+                ui.label("0-5 stars   Enter open   Esc close   Del remove   drag: reorder / drop on album");
                 if self.viewer.is_some() {
                     ui.separator();
                     ui.label("zoom  +/-   1:1  Space/Esc");
@@ -1043,6 +1117,48 @@ mod tests {
         assert_eq!(key.size, ThumbSize::Normal);
         assert_eq!(key.fingerprint.len, 1234);
         assert_eq!(key.fingerprint.modified_secs, 42);
+    }
+
+    /// Builds an `Entry` for an already-written file.
+    fn entry(path: &Path, rating: u8) -> Entry {
+        let metadata = std::fs::metadata(path).expect("metadata");
+        let modified = metadata
+            .modified()
+            .expect("mtime")
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("epoch");
+        Entry {
+            path: path.to_path_buf(),
+            name: file_name(path),
+            key: ThumbKey {
+                source: path.to_path_buf(),
+                fingerprint: SourceFingerprint {
+                    len: metadata.len(),
+                    modified_secs: modified.as_secs() as i64,
+                    modified_nanos: modified.subsec_nanos(),
+                },
+                size: ThumbSize::Normal,
+            },
+            rating,
+        }
+    }
+
+    /// The album's stored order, as file names.
+    fn album_order(app: &PinacotecaApp, album: i64) -> Vec<String> {
+        app.db
+            .as_ref()
+            .expect("db")
+            .album_photos(album)
+            .expect("photos")
+            .into_iter()
+            .map(|row| {
+                Path::new(&row.path)
+                    .file_name()
+                    .expect("file name")
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect()
     }
 
     #[test]
@@ -1180,6 +1296,50 @@ mod tests {
             std::fs::read_to_string(dir.join(".picasa.ini")).expect("ini"),
             ini_text
         );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Drag-reorder inside an album: the dragged photo lands on the target slot
+    /// and every other photo keeps its relative order.
+    #[test]
+    fn dragging_inside_an_album_moves_that_photo_to_the_slot() {
+        let dir = std::env::temp_dir().join(format!("pinacoteca-reorder-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        let db = Database::open_in_memory().expect("db");
+        db.upsert_folder("root").expect("folder");
+        let album = db.create_album("Trip").expect("album");
+
+        let mut entries = Vec::new();
+        let mut paths = Vec::new();
+        for name in ["a.jpg", "b.jpg", "c.jpg"] {
+            let path = dir.join(name);
+            std::fs::write(&path, name).expect("photo");
+            db.upsert_photo_facts(&path.to_string_lossy(), Some(1), 1, 1, Some("jpg"))
+                .expect("facts");
+            paths.push(path.to_string_lossy().into_owned());
+            entries.push(entry(&path, 0));
+        }
+        db.add_photos(album, &paths).expect("add");
+
+        let mut app = PinacotecaApp {
+            db: Some(db),
+            entries: entries.clone(),
+            view: View::Album(album),
+            visible: entries.clone(),
+            ..PinacotecaApp::default()
+        };
+        app.rebuild_visible();
+        assert_eq!(album_order(&app, album), ["a.jpg", "b.jpg", "c.jpg"]);
+
+        // Drag c.jpg onto the first slot.
+        app.dragging = Some(dir.join("c.jpg"));
+        app.reorder_album_to(0);
+
+        assert_eq!(album_order(&app, album), ["c.jpg", "a.jpg", "b.jpg"]);
+        assert!(app.dragging.is_none(), "the drag ends once it is dropped");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

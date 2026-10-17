@@ -18,7 +18,8 @@ Exit criteria:
       from the sidebar detail panel; clearing a field clears the column.
       (`date` is stored but not edited yet.)
 - [x] UI: remove a photo from an album — `Delete` (file and catalog row untouched).
-- [ ] UI: reorder an album by drag-and-drop.
+- [x] UI: drag-and-drop — dragging a grid cell onto an album adds the photo;
+      dragging onto another cell reorders the album.
 - [x] UI: folder views — `View::Folder(dir)`, listed in the sidebar.
 - [x] `.picasa.ini` album import: stars, captions and keywords restored
       read-only; album membership deliberately skipped (Picasa stores opaque
