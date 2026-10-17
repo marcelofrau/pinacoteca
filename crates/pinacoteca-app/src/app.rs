@@ -50,6 +50,15 @@ enum View {
     Folder(PathBuf),
 }
 
+/// Editable detail fields for one album.
+#[derive(Debug, Clone)]
+struct AlbumEdit {
+    id: i64,
+    description: String,
+    place_taken: String,
+    music_path: String,
+}
+
 /// Top-level application state.
 pub struct PinacotecaApp {
     db: Option<Database>,
@@ -69,6 +78,8 @@ pub struct PinacotecaApp {
     view: View,
     /// Name typed for a new album.
     new_album: String,
+    /// Detail fields being edited for the selected album.
+    album_edit: Option<AlbumEdit>,
     /// Photos shown under the current [`View`].
     visible: Vec<Entry>,
 }
@@ -102,6 +113,7 @@ impl Default for PinacotecaApp {
             view: View::All,
             visible: Vec::new(),
             new_album: String::new(),
+            album_edit: None,
             status,
         }
     }
@@ -136,6 +148,16 @@ fn key_for(photo: &DiscoveredPhoto, size: ThumbSize) -> ThumbKey {
             modified_nanos: photo.modified_nanos,
         },
         size,
+    }
+}
+
+/// Turns an empty string into `None`, so clearing a field clears the column.
+fn empty_as_none(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
     }
 }
 
@@ -322,12 +344,51 @@ impl PinacotecaApp {
         self.rebuild_visible();
     }
 
+    /// Loads the editable detail fields for an album.
+    fn load_album_edit(&mut self, album_id: i64) {
+        let Some(album) = self.albums.iter().find(|album| album.id == album_id) else {
+            self.album_edit = None;
+            return;
+        };
+        self.album_edit = Some(AlbumEdit {
+            id: album.id,
+            description: album.description.clone().unwrap_or_default(),
+            place_taken: album.place_taken.clone().unwrap_or_default(),
+            music_path: album.music_path.clone().unwrap_or_default(),
+        });
+    }
+
+    /// Persists the edited detail fields.
+    fn save_album_edit(&mut self) {
+        let Some(edit) = self.album_edit.clone() else {
+            return;
+        };
+        let saved = self.db.as_ref().map(|db| {
+            db.set_album_detail(
+                edit.id,
+                empty_as_none(&edit.description),
+                empty_as_none(&edit.place_taken),
+                empty_as_none(&edit.music_path),
+                None,
+            )
+        });
+        match saved {
+            Some(Ok(())) => {
+                self.refresh_albums();
+                self.status = "Album details saved".into();
+            }
+            Some(Err(error)) => self.status = format!("album: {error}"),
+            None => {}
+        }
+    }
+
     /// The album sidebar: all photos, smart albums and manual albums.
     fn sidebar_ui(&mut self, ctx: &egui::Context) {
         let mut pick: Option<View> = None;
         let mut create = false;
         let mut add_selected: Option<i64> = None;
         let mut delete: Option<i64> = None;
+        let mut save = false;
 
         egui::SidePanel::left("albums")
             .resizable(true)
@@ -419,11 +480,32 @@ impl PinacotecaApp {
                         create = true;
                     }
                 });
+
+                if let Some(edit) = &mut self.album_edit {
+                    ui.add_space(10.0);
+                    ui.strong("Album details");
+                    ui.label("Description");
+                    ui.text_edit_multiline(&mut edit.description);
+                    ui.label("Place taken");
+                    ui.text_edit_singleline(&mut edit.place_taken);
+                    ui.label("Music");
+                    ui.text_edit_singleline(&mut edit.music_path);
+                    if ui.button("Save details").clicked() {
+                        save = true;
+                    }
+                }
             });
 
         if let Some(view) = pick {
+            match view {
+                View::Album(id) => self.load_album_edit(id),
+                _ => self.album_edit = None,
+            }
             self.view = view;
             self.rebuild_visible();
+        }
+        if save {
+            self.save_album_edit();
         }
         if create {
             let name = self.new_album.trim().to_string();

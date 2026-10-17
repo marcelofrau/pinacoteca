@@ -552,4 +552,33 @@ mod tests {
             ["C:/pics/a.jpg", "C:/pics/b.jpg"]
         );
     }
+
+    #[test]
+    fn album_details_round_trip_and_clearing_removes_them() {
+        let db = crate::Database::open_in_memory().expect("db");
+        let album = db.create_album("Trip").expect("album");
+
+        db.set_album_detail(
+            album,
+            Some("Summer"),
+            Some("Lisbon"),
+            Some("C:/m.mp3"),
+            Some(42),
+        )
+        .expect("save");
+        let saved = db.list_albums().expect("albums").remove(0);
+        assert_eq!(saved.description.as_deref(), Some("Summer"));
+        assert_eq!(saved.place_taken.as_deref(), Some("Lisbon"));
+        assert_eq!(saved.music_path.as_deref(), Some("C:/m.mp3"));
+        assert_eq!(saved.date, Some(42));
+
+        // Clearing a field must clear the column, not leave the old value.
+        db.set_album_detail(album, None, Some("Lisbon"), None, None)
+            .expect("clear");
+        let cleared = db.list_albums().expect("albums").remove(0);
+        assert_eq!(cleared.description, None);
+        assert_eq!(cleared.music_path, None);
+        assert_eq!(cleared.date, None);
+        assert_eq!(cleared.place_taken.as_deref(), Some("Lisbon"));
+    }
 }

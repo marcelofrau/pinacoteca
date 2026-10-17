@@ -14,8 +14,9 @@ Exit criteria:
       `Starred`, `Year`, `Month`).
 - [x] UI: album list with photo counts, create album, add selected photo.
 - [x] UI: stars — keys `0`–`5`, persisted, painted on the grid.
-- [ ] Album metadata: columns exist (`description`, `place_taken`,
-      `music_path`, `date`) but the dialog fields are not wired yet.
+- [x] Album metadata: `description`, `place_taken` and `music_path` round-trip
+      from the sidebar detail panel; clearing a field clears the column.
+      (`date` is stored but not edited yet.)
 - [x] UI: remove a photo from an album — `Delete` (file and catalog row untouched).
 - [ ] UI: reorder an album by drag-and-drop.
 - [x] UI: folder views — `View::Folder(dir)`, listed in the sidebar.
