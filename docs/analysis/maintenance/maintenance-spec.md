@@ -2,7 +2,8 @@
 
 Source of truth: `runtime/filterdesc.xml` from the shipped Picasa 3 runtime tree.
 Also cross-referenced with menu command IDs and RTTI class names recovered from the
-`Picasa3.exe` ASCII string corpus (see `target-strings.txt`).
+`Picasa3.exe` ASCII string corpus (raw dump kept in the git-ignored
+`analysis-scratch/`, not committed).
 
 ## Clean-room note
 
@@ -233,7 +234,7 @@ index a filter/effect table, consistent with `filterdesc.xml` being that table.
   study, not shipped recipes) — deferred to M5 design.
 - Which `real=`/`Variable=` slots correspond to which visible control in the
   Glimmer effects — recover by studying the recipe *interface* only, not the body.
-- Crop/Straighten/Rotate canvas coordinate model — document separately under
-  `maintenance/` (geometry sub-spec).
+- Crop/Straighten/Rotate canvas coordinate model — **resolved**: documented in
+  `maintenance/geometry-spec.md`.
 - Red-eye detection data lives in `plugins/red.cfg` (2.2 MB) + `Red.dll` — separate
   study if red-eye enters scope.

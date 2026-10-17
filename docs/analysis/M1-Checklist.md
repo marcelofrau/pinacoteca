@@ -4,7 +4,7 @@
 - [x] REA Ghidra provider healthy; handle Windows ACL/bridge temp copy
 - [x] Collect resource-driven hints (.fen/.ui/.yt, constants.ui, properties.xml)
 - [x] Plan string-driven + resource-driven REA (avoid full procedure enum timeouts)
-- [x] PicasaPhotoViewer.exe: map viewer behaviors (fullscreen/zoom/pan/filmstrip/slideshow/nav) — viewer-spec-draft.md (pass 3 closed)
+- [x] PicasaPhotoViewer.exe: map viewer behaviors (fullscreen/zoom/pan/filmstrip/slideshow/nav) — viewer-spec.md (pass 3 closed)
 - [x] Picasa3.exe: map albums/grid/thumbnails — albums-spec.md (pass 5 closed)
 - [x] Picasa3.exe: map maintenance actions — maintenance-spec.md (pass 4 closed, 84-filter catalog)
 - [x] Document maintenance spec
@@ -12,4 +12,4 @@
 - [x] Recover DB/store filenames — formats/pmp-notes.md
 - [x] Geometry sub-spec: crop / straighten / rotate canvas model — maintenance/geometry-spec.md (pass 6 closed)
 - [x] Investigate PMP/DB schema from real .db files — formats/pmp-notes.md (pass 7 closed; db3 is a private container, NOT SQLite; `.picasa.ini` is the authoritative layer)
-- [ ] Write behavioral specs sufficient for clean-room reimplementation
+- [x] Write behavioral specs sufficient for clean-room reimplementation — M1-Completeness.md (pass 8 closed; verdict: M1 complete)

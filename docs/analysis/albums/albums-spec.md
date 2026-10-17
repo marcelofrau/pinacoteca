@@ -166,6 +166,10 @@ Grid/layout engine classes: `picturegrid`, `regulargrid`, `framegrid`,
 
 ### Persisted stores (file names recovered)
 
+> **Note (pass 7):** these stores are **not SQLite** — they are Picasa's private
+> `db3` container format. See `formats/pmp-notes.md`. They are derived cache; the
+> authoritative metadata layer is per-folder `.picasa.ini`.
+
 | File | Purpose |
 |------|---------|
 | `thumbs.db`, `thumbs2.db` | primary thumbnail caches |
@@ -197,11 +201,15 @@ surface, not this milestone):
 
 ## 10. Open questions / follow-ups
 
-- Exact `.db` SQLite schemas (tables/columns) — derive from DB file inspection,
-  not string corpus. Tracked under `formats/`.
-- Whether `thumbs.db` uses a size-column keyed schema and how size classes map.
+- ~~Exact `.db` SQLite schemas~~ **Resolved (pass 7):** the `db3` files are a
+  private container, not SQLite; image stores are concatenated JPEG blobs and the
+  payload of `albums_0.db` is obfuscated. See `formats/pmp-notes.md`.
+- ~~Whether `thumbs.db` uses a size-column keyed schema~~ **Resolved (pass 7):**
+  thumbnail size class is expressed by *which store* holds the record
+  (thumbs/thumbs2/bigthumbs/previews), not by a column.
 - `.picasa.ini` key names and forward-migration rules (backward compatibility
-  is a hard requirement).
+  is a hard requirement) — schema recovered in pass 7 (`formats/pmp-notes.md`);
+  forward-migration policy still to be designed in M4.
 - `TileWidth`/grid reflow math (square vs aspect tiles, caption rows).
 - Timeline bucketing granularity (year/month/day) and ordering (date taken vs
   file date).

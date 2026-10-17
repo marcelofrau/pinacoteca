@@ -1,8 +1,0 @@
-# Maintenance Actions (target strings)
-- Rotate (CW/CCW), Crop, Straighten, AutoFix/Enhance, RedEye, Sharpen, Sepia, BlackWhite/B&W, Temperature, Brightness, Contrast, Saturation
-# Albums
-- Album, Folder, Group, Tag/People (face-related later excluded but UI)
-# Thumbnails
-- Thumbnail, Thumb, Grid
-# Viewer
-- Zoom, Pan, FullScreen, Filmstrip, Slideshow

@@ -71,3 +71,12 @@ M1 in progress; geometry sub-spec pass 6 CLOSED.
 
 M1 in progress; DB/metadata schema pass 7 CLOSED.
 Remaining for M1: final spec completeness pass (cross-cutting review + gap sweep).
+
+## M1 status (pass 8 — final completeness review) — M1 COMPLETE
+- Reviewed all four live specs against the "sufficient for clean-room reimplementation" criterion and wrote `M1-Completeness.md` (scope coverage, clean-room compliance, residual non-blocking gaps, blocked/dead-end approaches, verdict).
+- Scope verdict: image viewing, album organization, and photo maintenance are all covered at the required level; out-of-scope areas (faces, import/export, share, web tools) noted only.
+- Residual gaps are all non-blocking and scheduled: keyboard bindings / pan / slideshow-default → runtime probes in M3; `rect64` packing + `fr=` → verify against a local `.picasa.ini` sample; per-filter pixel math + `real=`/`Variable=` mapping → M5 design; `.picasa.ini` forward-migration → M4 design; `albums_0.db` payload → off critical path.
+- Tidied the docs tree: renamed `viewer-spec-draft.md` → `viewer-spec.md` (dropping the misleading "draft" suffix); moved raw scratch (`zoomtext-notes.md`, `zoomtext-xrefs.md`, `ui-state-machines.md`, `target-strings.txt`) and superseded drafts (`albums-thumbnails-draft.md`, `maintenance-draft.md`) to the git-ignored `analysis-scratch/superseded/`.
+- Fixed stale content: `albums-spec.md` no longer claims SQLite schemas (points to `formats/pmp-notes.md`); `maintenance-spec.md` marks the geometry open-question resolved; rewrote `README.md` index with the delivered specs + status.
+
+**M1 COMPLETE.** Next: M2 architecture spike (decoder benchmarks on real photos, GPU render pipeline, ADRs, final architecture) — awaiting go-ahead.
