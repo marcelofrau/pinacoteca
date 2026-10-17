@@ -24,4 +24,5 @@ Exit criteria:
 - [x] `.picasa.ini` album import: stars, captions and keywords restored
       read-only; album membership deliberately skipped (Picasa stores opaque
       tokens there and the names live in its obfuscated `albums_0.db`).
-- [ ] Docs updated: architecture, completeness review.
+- [x] Docs updated: `M4-Completeness.md`, `architecture.md` (schema v3, Picasa
+      library import).
