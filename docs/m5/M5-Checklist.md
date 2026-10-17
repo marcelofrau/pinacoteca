@@ -21,4 +21,4 @@ Exit criteria:
 - [x] Persistence: one `edit_ops` row per op, replayed and reorderable.
 - [x] UI: edit panel with sliders, live preview, undo/reset.
 - [x] The original file is byte-identical before and after editing (test).
-- [ ] Docs: `M5-Completeness.md`, architecture update.
+- [x] Docs: `M5-Completeness.md`, architecture update.

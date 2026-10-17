@@ -45,14 +45,16 @@ flowchart TB
 |-------|----------------|
 | `pinacoteca-app` | Binary. Window, UI, input; owns the UI/GPU thread and the worker threads. |
 | `pinacoteca-core` | Domain model and logic: catalog, albums, tags, ratings, edit stacks. No UI, no I/O specifics. |
-| `pinacoteca-render` | Image preparation: mip pyramid and thumbnail cache / request queue. Graphics-free, headless-testable. |
+| `pinacoteca-render` | Image preparation and the edit pipeline: mip pyramid, thumbnail cache / request queue, image ops and non-destructive `edits`. Graphics-free, headless-testable. |
 | `pinacoteca-decoders` | Decoder abstraction and implementations (`zune-jpeg`, `png`; `mozjpeg` optional). |
 | `pinacoteca-db` | SQLite persistence, schema migrations, queries. |
 | `pinacoteca-bench` | Analysis-only benchmark harness (`publish = false`); never shipped. |
 
 Dependency direction: `app` depends on `core`, `render`, `decoders` and `db`;
-`render` depends on `decoders` (for image data); `core` and `db` are independent
-leaves. `core` never depends on `app` or on a UI framework.
+`render` depends on `core` (the `EditStack` it replays) and on `decoders` (for
+image data); `db` depends on `core` (it persists `core` types, including edit
+stacks); `core` and `decoders` are leaves. `core` never depends on `app`, on the
+database or on a UI framework.
 
 ## Performance strategy
 
@@ -125,6 +127,24 @@ is parsed read-only for stars, captions and keywords
 library that Picasa still manages keeps working. Album membership is
 deliberately not imported — Picasa stores opaque tokens there and resolves the
 names in its own obfuscated database.
+
+## Editing
+
+Edits are non-destructive. `pinacoteca-core::edit` defines an ordered
+[`EditStack`]; `pinacoteca-render::edits` replays it over the decoded pixels in
+one pass; the panel previews the same replay at thumbnail resolution. Saving
+writes one `edit_ops` row per operation, so a stack is data, not a rewritten
+file.
+
+The adjustment mappings are ours (`-100..=100`, see `edits/tone.rs`). The M1
+analysis records only the catalog — labels, ranges, conceptual behaviour — and
+the `filterdesc.xml` effect scripts stay reference-only (`#1204`), so the pixel
+maths is re-derived, never copied.
+
+`EditStack::set` replaces operations of the same kind (sliders) while `push`
+composes (rotate), which keeps a dragged slider from stacking hundreds of
+operations. `editing_never_rewrites_the_original_file` asserts the file bytes are
+unchanged after a full edit-and-save cycle.
 
 The database lives under the user's local application data directory, e.g.
 `%LOCALAPPDATA%\Pinacoteca`. The thumbnail cache ([ADR-0003](adr/0003-thumbnail-cache.md))
