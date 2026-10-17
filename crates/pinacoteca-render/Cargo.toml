@@ -10,5 +10,6 @@ homepage.workspace = true
 description = "Multi-resolution image preparation and GPU rendering pipeline for Pinacoteca."
 
 [dependencies]
+pinacoteca-core = { path = "../pinacoteca-core" }
 pinacoteca-decoders = { path = "../pinacoteca-decoders" }
 jpeg-encoder = "0.7.1"

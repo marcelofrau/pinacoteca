@@ -326,7 +326,7 @@ impl crate::Database {
         Ok(rows)
     }
 
-    fn photo_id_by_path(&self, path: &str) -> Result<Option<i64>, DbError> {
+    pub(crate) fn photo_id_by_path(&self, path: &str) -> Result<Option<i64>, DbError> {
         Ok(self
             .conn
             .query_row(

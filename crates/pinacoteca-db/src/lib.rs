@@ -6,6 +6,7 @@
 
 pub mod albums;
 pub mod catalog;
+pub mod edits;
 
 use std::path::Path;
 
@@ -16,6 +17,8 @@ pub enum DbError {
     Sqlite(rusqlite::Error),
     /// A migration failed.
     Migration(String),
+    /// A stored edit operation could not be decoded.
+    EditPayload(String),
 }
 
 impl std::fmt::Display for DbError {
@@ -23,6 +26,7 @@ impl std::fmt::Display for DbError {
         match self {
             DbError::Sqlite(e) => write!(f, "database error: {e}"),
             DbError::Migration(m) => write!(f, "migration error: {m}"),
+            DbError::EditPayload(m) => write!(f, "edit payload error: {m}"),
         }
     }
 }
@@ -32,6 +36,7 @@ impl std::error::Error for DbError {
         match self {
             DbError::Sqlite(e) => Some(e),
             DbError::Migration(_) => None,
+            DbError::EditPayload(_) => None,
         }
     }
 }

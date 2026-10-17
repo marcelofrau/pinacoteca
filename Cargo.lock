@@ -2392,7 +2392,9 @@ dependencies = [
 name = "pinacoteca-db"
 version = "0.1.0"
 dependencies = [
+ "pinacoteca-core",
  "rusqlite",
+ "serde_json",
 ]
 
 [[package]]
@@ -2409,6 +2411,7 @@ name = "pinacoteca-render"
 version = "0.1.0"
 dependencies = [
  "jpeg-encoder",
+ "pinacoteca-core",
  "pinacoteca-decoders",
 ]
 
