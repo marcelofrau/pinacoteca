@@ -37,6 +37,27 @@ pub struct PhotoRow {
     pub rating: u8,
 }
 
+impl PhotoRow {
+    /// Reads a [`PhotoRow`] from a statement selecting its fields in order.
+    pub fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            path: row.get(1)?,
+            folder_id: row.get(2)?,
+            file_size: row.get(3)?,
+            modified_secs: row.get(4)?,
+            width: row.get(5)?,
+            height: row.get(6)?,
+            orientation: row.get(7)?,
+            date_taken: row.get(8)?,
+            format: row.get(9)?,
+            caption: row.get(10)?,
+            hidden: row.get(11)?,
+            rating: row.get(12)?,
+        })
+    }
+}
+
 impl Database {
     /// Inserts a folder if needed and returns its id.
     pub fn upsert_folder(&self, path: &str) -> Result<i64, DbError> {

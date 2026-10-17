@@ -72,8 +72,8 @@ fn run(root: PathBuf, limit: usize) {
             }),
             size: ThumbSize::Normal,
         };
-        let orientation =
-            pinacoteca_decoders::exif::read_orientation(&photo.path).unwrap_or(Orientation::Upright);
+        let orientation = pinacoteca_decoders::exif::read_orientation(&photo.path)
+            .unwrap_or(Orientation::Upright);
         let started = Instant::now();
         match generate(&cache, &key, decoder, orientation) {
             Ok(_) => total += started.elapsed(),
@@ -104,4 +104,3 @@ fn run(root: PathBuf, limit: usize) {
     }
     println!("cache: {}", cache_root.display());
 }
-

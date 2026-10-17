@@ -4,6 +4,7 @@
 //! never referenced as writable and are never modified. Schema changes are
 //! applied as ordered migrations; see [`migrate`].
 
+pub mod albums;
 pub mod catalog;
 
 use std::path::Path;
@@ -42,12 +43,13 @@ impl From<rusqlite::Error> for DbError {
 }
 
 /// The highest schema version this build understands.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Ordered schema migrations. Each entry moves the schema to version `index + 1`.
 const MIGRATIONS: &[&str] = &[
     include_str!("migrations/0001_initial.sql"),
     include_str!("migrations/0002_catalog_metadata.sql"),
+    include_str!("migrations/0003_albums_tags.sql"),
 ];
 
 /// An open connection to a Pinacoteca database.
@@ -218,7 +220,7 @@ mod tests {
     fn schema_version_tracks_migrations() {
         let db = Database::open_in_memory().unwrap();
         assert_eq!(db.schema_version().unwrap(), SCHEMA_VERSION);
-        assert_eq!(SCHEMA_VERSION, 2);
+        assert_eq!(SCHEMA_VERSION as usize, MIGRATIONS.len());
     }
 
     #[test]
