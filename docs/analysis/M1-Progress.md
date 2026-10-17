@@ -35,3 +35,17 @@ M1 remains in progress; pass 3 (keyboard/slideshow timing) optional before M2 ga
 - Remaining: albums/grid/thumbnails spec (resource + string survey), geometry sub-spec (crop/straighten/rotate), PMP/DB schema.
 
 M1 in progress; maintenance spec pass 4 CLOSED.
+
+## M1 status (pass 5 — Picasa3 albums/grid/thumbnails)
+- Recovered the library view model: full `ID_VIEW_*` set (Timeline, Folders, All, Watched, People, Places, Keywords, Search, Lightbox, Thumbnails small/normal/large, Picture, Properties, Slideshow, Edit, colour-managed, show-hidden, plus monitor display-profile toggles).
+- Recovered the album command set and album model: `IAlbumStore`/`CAlbumList`/`CAlbumSelectionNode`/`CMultiAlbumNode`; album actions (New, EditCaptions, Delete, LocateOnDisk, Slideshow, SelectAll, Move/CopyToCollection, Combine, Make_Web, PrintContactSheet, RefreshThumbnails, SendTo_*, Labels).
+- Album metadata fields from `album.fen`: Name, Date (+Automatic date), Music (slideshow/movie), Place taken, Description.
+- Special albums from `CThumbDB`: Starred, RecentUpdate, Emailed, Exported, Screensaver, Unknown/IgnoredPeople (faces scope-excluded).
+- Star/rating model: `CThumbUI::sstarred`, `CStarredEnabler`, XMP::Rating, star icons.
+- Thumbnail grid + layout constants from `constants.ui`: gutters, Georgia title/body fonts, selected-thumbnail outline colours.
+- Thumbnail pipeline: `CThumbDB`/`IThumbDB`/`CThumbnailProvider`, EXIF-thumbnail reuse option, refresh progress UI.
+- DB/store filenames recovered (thumbs.db, thumbs2.db, bigthumbs.db, previews.db, albums.db, profilephotos.db, index/thumbs_index/thumbindex, facetemplates, distims, `.picasa.ini`) — documented in formats/pmp-notes.md.
+- Wrote `albums/albums-spec.md`; enriched `formats/pmp-notes.md`. `albums-thumbnails-draft.md` superseded.
+
+M1 in progress; albums/grid/thumbnails spec pass 5 CLOSED.
+Remaining for M1: geometry sub-spec (crop/straighten/rotate canvas model), DB schema derivation from real .db files, final spec completeness pass.

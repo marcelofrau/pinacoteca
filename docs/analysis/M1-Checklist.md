@@ -5,10 +5,11 @@
 - [x] Collect resource-driven hints (.fen/.ui/.yt, constants.ui, properties.xml)
 - [x] Plan string-driven + resource-driven REA (avoid full procedure enum timeouts)
 - [x] PicasaPhotoViewer.exe: map viewer behaviors (fullscreen/zoom/pan/filmstrip/slideshow/nav) — viewer-spec-draft.md (pass 3 closed)
-- [ ] Picasa3.exe: map albums/grid/thumbnails
+- [x] Picasa3.exe: map albums/grid/thumbnails — albums-spec.md (pass 5 closed)
 - [x] Picasa3.exe: map maintenance actions — maintenance-spec.md (pass 4 closed, 84-filter catalog)
 - [x] Document maintenance spec
-- [ ] Document albums/thumbnails spec
+- [x] Document albums/thumbnails spec
+- [x] Recover DB/store filenames — formats/pmp-notes.md
 - [ ] Geometry sub-spec: crop / straighten / rotate canvas model
 - [ ] Investigate PMP/DB schema from code references
 - [ ] Write behavioral specs sufficient for clean-room reimplementation
