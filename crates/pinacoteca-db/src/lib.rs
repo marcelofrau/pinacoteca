@@ -4,6 +4,8 @@
 //! never referenced as writable and are never modified. Schema changes are
 //! applied as ordered migrations; see [`migrate`].
 
+pub mod catalog;
+
 use std::path::Path;
 
 /// Errors produced by the persistence layer.

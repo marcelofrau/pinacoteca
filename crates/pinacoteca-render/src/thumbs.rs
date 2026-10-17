@@ -514,8 +514,13 @@ mod tests {
         };
 
         let decoder = pinacoteca_decoders::JpegDecoder::new();
-        let generated =
-            generate(&cache, &key, &decoder, pinacoteca_decoders::Orientation::Upright).unwrap();
+        let generated = generate(
+            &cache,
+            &key,
+            &decoder,
+            pinacoteca_decoders::Orientation::Upright,
+        )
+        .unwrap();
 
         assert!(cache.contains(&key));
         assert_eq!((generated.width, generated.height), (256, 171));
@@ -531,11 +536,14 @@ mod tests {
     #[test]
     fn generate_applies_exif_orientation() {
         let mut pixels = vec![0u8; 40 * 20 * 4];
-        pixels.chunks_exact_mut(4).for_each(|p| p.copy_from_slice(&[10, 20, 30, 255]));
+        pixels
+            .chunks_exact_mut(4)
+            .for_each(|p| p.copy_from_slice(&[10, 20, 30, 255]));
         let source = pinacoteca_decoders::RgbaImage::new(40, 20, pixels).unwrap();
         let encoded = encode_jpeg(&source, THUMB_JPEG_QUALITY).unwrap();
 
-        let dir = std::env::temp_dir().join(format!("pinacoteca-orient-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("pinacoteca-orient-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let source_path = dir.join("source.jpg");
@@ -550,8 +558,13 @@ mod tests {
 
         let decoder = pinacoteca_decoders::JpegDecoder::new();
         // Orientation 6 rotates 90° CW, so 40x20 becomes 20x40.
-        let generated =
-            generate(&cache, &key, &decoder, pinacoteca_decoders::Orientation::Rotate90Cw).unwrap();
+        let generated = generate(
+            &cache,
+            &key,
+            &decoder,
+            pinacoteca_decoders::Orientation::Rotate90Cw,
+        )
+        .unwrap();
         assert_eq!((generated.width, generated.height), (20, 40));
 
         let _ = fs::remove_dir_all(&dir);

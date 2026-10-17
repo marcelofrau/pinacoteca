@@ -209,8 +209,10 @@ mod tests {
 
     #[test]
     fn embedded_thumbnail_absent_in_plain_jpeg() {
-        assert!(embedded_thumbnail_file(&fixture("tiny.jpg"))
-            .unwrap()
-            .is_none());
+        assert!(
+            embedded_thumbnail_file(&fixture("tiny.jpg"))
+                .unwrap()
+                .is_none()
+        );
     }
 }

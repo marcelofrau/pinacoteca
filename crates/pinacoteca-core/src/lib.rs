@@ -11,7 +11,9 @@
 pub mod album;
 pub mod catalog;
 pub mod edit;
+pub mod scan;
 
 pub use album::{Album, AlbumId, AlbumKind};
 pub use catalog::{Photo, PhotoId, Rating};
 pub use edit::{EditOp, EditStack, Effect, Rotation};
+pub use scan::{DiscoveredPhoto, ScanStats, scan_folder};
