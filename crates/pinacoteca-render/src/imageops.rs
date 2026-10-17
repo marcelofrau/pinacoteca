@@ -99,7 +99,7 @@ mod tests {
 
     fn image(width: u32, height: u32) -> RgbaImage {
         let mut pixels = vec![0u8; width as usize * height as usize * 4];
-        for (index, pixel) in pixels.chunks_exact_mut(4).enumerate() {
+        for (index, pixel) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             pixel.copy_from_slice(&[(index % 256) as u8, 10, 20, 255]);
         }
         RgbaImage::new(width, height, pixels).unwrap()

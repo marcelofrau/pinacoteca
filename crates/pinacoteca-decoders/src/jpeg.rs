@@ -70,7 +70,7 @@ fn to_rgba(buffer: Vec<u8>, width: u32, height: u32) -> Result<RgbaImage, Decode
     let mut rgba = Vec::with_capacity(pixel_count * 4);
     match buffer.len() {
         n if n == pixel_count * 3 => {
-            for chunk in buffer.chunks_exact(3) {
+            for chunk in buffer.as_chunks::<3>().0 {
                 rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
             }
         }
@@ -155,7 +155,7 @@ mod tests {
         let image = decoder.decode(&fixture("tiny.jpg")).unwrap();
         assert_eq!((image.width, image.height), (4, 3));
         assert_eq!(image.pixels.len(), 4 * 3 * 4);
-        assert!(image.pixels.chunks_exact(4).all(|p| p[3] == 255));
+        assert!(image.pixels.as_chunks::<4>().0.iter().all(|p| p[3] == 255));
     }
 
     #[test]

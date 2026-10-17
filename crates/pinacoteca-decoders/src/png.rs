@@ -61,7 +61,7 @@ impl Decoder for PngDecoder {
             png::ColorType::Rgba => buffer[..info.buffer_size()].to_vec(),
             png::ColorType::Rgb => {
                 let mut rgba = Vec::with_capacity(pixel_count * 4);
-                for chunk in buffer[..info.buffer_size()].chunks_exact(3) {
+                for chunk in buffer[..info.buffer_size()].as_chunks::<3>().0 {
                     rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
                 }
                 rgba
@@ -71,7 +71,9 @@ impl Decoder for PngDecoder {
                 .flat_map(|&v| [v, v, v, 255])
                 .collect(),
             png::ColorType::GrayscaleAlpha => buffer[..info.buffer_size()]
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .flat_map(|c| [c[0], c[0], c[0], c[1]])
                 .collect(),
             png::ColorType::Indexed => {
@@ -114,6 +116,6 @@ mod tests {
         let image = decoder.decode(&fixture("tiny.png")).unwrap();
         assert_eq!((image.width, image.height), (4, 3));
         assert_eq!(image.pixels.len(), 4 * 3 * 4);
-        assert!(image.pixels.chunks_exact(4).all(|p| p[3] == 255));
+        assert!(image.pixels.as_chunks::<4>().0.iter().all(|p| p[3] == 255));
     }
 }

@@ -1,0 +1,9 @@
+# Pin the toolchain so a local run and CI agree exactly.
+#
+# CI used to install `stable`, which moves every six weeks; a new clippy lint
+# that did not exist locally failed the build on a file that was clean here.
+# With the channel pinned, `cargo clippy` reports the same lints everywhere.
+# The crate MSRV stays lower (`rust-version` in the workspace manifest).
+[toolchain]
+channel = "1.98.0"
+components = ["rustfmt", "clippy"]

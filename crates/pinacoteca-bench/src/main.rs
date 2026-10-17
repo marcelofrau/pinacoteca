@@ -408,7 +408,7 @@ fn decode_rgba(data: &[u8]) -> Result<pinacoteca_decoders::RgbaImage, String> {
     let width = info.width as u32;
     let height = info.height as u32;
     let mut rgba = vec![0u8; width as usize * height as usize * 4];
-    for (i, chunk) in rgb.chunks_exact(3).enumerate() {
+    for (i, chunk) in rgb.as_chunks::<3>().0.iter().enumerate() {
         rgba[i * 4] = chunk[0];
         rgba[i * 4 + 1] = chunk[1];
         rgba[i * 4 + 2] = chunk[2];

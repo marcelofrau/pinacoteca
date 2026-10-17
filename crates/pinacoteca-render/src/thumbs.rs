@@ -495,7 +495,7 @@ mod tests {
     fn generate_downscales_orients_and_caches() {
         // A 600x400 source, so resizing to Normal (256) is exercised.
         let mut pixels = vec![0u8; 600 * 400 * 4];
-        for (index, pixel) in pixels.chunks_exact_mut(4).enumerate() {
+        for (index, pixel) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             pixel.copy_from_slice(&[(index % 251) as u8, 90, 30, 255]);
         }
         let source = pinacoteca_decoders::RgbaImage::new(600, 400, pixels).unwrap();
@@ -538,7 +538,9 @@ mod tests {
     fn generate_applies_exif_orientation() {
         let mut pixels = vec![0u8; 40 * 20 * 4];
         pixels
-            .chunks_exact_mut(4)
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
             .for_each(|p| p.copy_from_slice(&[10, 20, 30, 255]));
         let source = pinacoteca_decoders::RgbaImage::new(40, 20, pixels).unwrap();
         let encoded = encode_jpeg(&source, THUMB_JPEG_QUALITY).unwrap();

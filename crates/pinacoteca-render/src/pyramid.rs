@@ -132,7 +132,7 @@ mod tests {
 
     fn solid(width: u32, height: u32, rgba: [u8; 4]) -> RgbaImage {
         let mut pixels = vec![0u8; width as usize * height as usize * 4];
-        for pixel in pixels.chunks_exact_mut(4) {
+        for pixel in pixels.as_chunks_mut::<4>().0.iter_mut() {
             pixel.copy_from_slice(&rgba);
         }
         RgbaImage::new(width, height, pixels).unwrap()
