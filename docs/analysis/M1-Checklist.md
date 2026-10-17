@@ -10,6 +10,6 @@
 - [x] Document maintenance spec
 - [x] Document albums/thumbnails spec
 - [x] Recover DB/store filenames — formats/pmp-notes.md
-- [ ] Geometry sub-spec: crop / straighten / rotate canvas model
-- [ ] Investigate PMP/DB schema from code references
+- [x] Geometry sub-spec: crop / straighten / rotate canvas model — maintenance/geometry-spec.md (pass 6 closed)
+- [ ] Investigate PMP/DB schema from real .db files
 - [ ] Write behavioral specs sufficient for clean-room reimplementation

@@ -48,4 +48,15 @@ M1 in progress; maintenance spec pass 4 CLOSED.
 - Wrote `albums/albums-spec.md`; enriched `formats/pmp-notes.md`. `albums-thumbnails-draft.md` superseded.
 
 M1 in progress; albums/grid/thumbnails spec pass 5 CLOSED.
-Remaining for M1: geometry sub-spec (crop/straighten/rotate canvas model), DB schema derivation from real .db files, final spec completeness pass.
+
+## M1 status (pass 6 — geometry: crop/straighten/rotate)
+- Crop stored as normalized `rect64` (four Q16 coords packed in 64 bits) via `crop=rect64(...)`; geometry record `width,height,crop,fr`.
+- Crop UI recovered: selection, preview, apply/cancel/discard, aspect menu, rotate-then-crop, custom-ratio delete; guides `xhairs.png`, `bezier.txt`.
+- Full aspect-ratio preset catalog + custom aspect dialog (`CAspectRatioList`, `CustomAspectRatioDlg`) under `Preferences\AspectRatios`.
+- Smart crop engine `CSmartCrop` with suggestion strategies (horizon/variance/colour/faces/border) and `cropsug1..3` previews.
+- Straighten = `tilt` tool, angle slider (`_sldrAngle`, `Angle: %d`, `radAngle`), auto-crop of empty corners (couples with `croprotatecrop`).
+- Rotate = 90° steps (`ID_PICTURE_ROTATECLOCKWISE/COUNTERCLOCKWISE`, `Rotated 90/180/270`, `EXIF::Rotate90/180/270`), glimmer `CropImageOperation`/`RotateImageOperation`.
+- Wrote `maintenance/geometry-spec.md` with domain-model mapping (NormalizedRect angle_rad quarter_turns).
+
+M1 in progress; geometry sub-spec pass 6 CLOSED.
+Remaining for M1: DB schema derivation from real .db files, final spec completeness pass.
