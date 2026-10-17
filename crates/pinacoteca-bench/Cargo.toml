@@ -1,0 +1,28 @@
+[package]
+name = "pinacoteca-bench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "M2 decoder benchmark harness (analysis tool, not shipped)."
+publish = false
+
+[[bin]]
+name = "pinacoteca-bench"
+path = "src/main.rs"
+
+[dependencies]
+zune-jpeg = "0.5.15"
+jpeg-decoder = "0.3.2"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+png = "0.18.1"
+kamadak-exif = "0.6.1"
+mozjpeg = { version = "0.10", optional = true }
+
+[features]
+# Native libjpeg-turbo (mozjpeg) decoder, for the pure-Rust vs native comparison.
+# Off by default: it needs a C toolchain (cmake + MSVC/gcc) at build time.
+native-mozjpeg = ["dep:mozjpeg"]
