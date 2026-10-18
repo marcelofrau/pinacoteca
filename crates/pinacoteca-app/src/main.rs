@@ -6,6 +6,7 @@
 
 mod app;
 mod editor;
+mod theme;
 mod workers;
 
 fn main() -> eframe::Result<()> {

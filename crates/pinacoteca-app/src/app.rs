@@ -12,6 +12,7 @@ use pinacoteca_db::{Database, albums::Smart};
 use pinacoteca_render::thumbs::{SourceFingerprint, ThumbKey, ThumbSize};
 
 use crate::editor::Editor;
+use crate::theme;
 use crate::workers::{ScanHandle, ScanMessage, ThumbPool};
 
 /// Size of a grid cell, in points.
@@ -664,8 +665,8 @@ fn upload(ctx: &egui::Context, name: &str, bytes: &[u8]) -> Option<egui::Texture
     Some(ctx.load_texture(name, color, egui::TextureOptions::LINEAR))
 }
 
-const CELL_BG: egui::Color32 = egui::Color32::from_rgb(40, 40, 44);
-const SELECTED_BG: egui::Color32 = egui::Color32::from_rgb(37, 100, 139);
+const CELL_BG: egui::Color32 = egui::Color32::WHITE;
+const SELECTED_BG: egui::Color32 = theme::CARD_SELECTED;
 
 impl PinacotecaApp {
     /// Draws the thumbnail grid.
@@ -724,9 +725,14 @@ impl PinacotecaApp {
             };
             ui.painter()
                 .rect_filled(rect, egui::CornerRadius::ZERO, background);
-
             if let Some(texture) = self.textures.get(&texture_name(&key)) {
-                draw_fitted(ui.painter(), rect, texture);
+                let inner = rect.shrink(4.0);
+                ui.painter().image(
+                    texture.id(),
+                    inner,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
             }
 
             let rating = self.visible[index].rating;
@@ -1083,7 +1089,7 @@ fn draw_fitted(painter: &egui::Painter, rect: egui::Rect, texture: &egui::Textur
 
 impl eframe::App for PinacotecaApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.set_visuals(egui::Visuals::dark());
+        crate::theme::apply(ctx);
         self.poll_workers();
 
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
